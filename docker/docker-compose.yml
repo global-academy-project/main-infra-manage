@@ -1,0 +1,76 @@
+services:
+  web-app:
+    container_name: web-release-container
+    restart: always
+    build:
+      context: ./web
+      dockerfile: Dockerfile.release
+  server-app:
+    container_name: server-release-container
+    restart: always
+    environment:
+      # WARNING: 서버에서 사용하는 Database의 Host는 외부 IP가 아닌 Docker Compose 내의 서비스 이름으로 정의해야 함 <DB_HOST=database-server>
+      - name=value
+    build:
+      context: ./server
+      dockerfile: Dockerfile.release
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+  ai-model-server:
+    container_name: ai-model-release-container
+    restart: always
+    build:
+      context: ./ai-model
+      dockerfile: Dockerfile.release
+  database-server:
+    container_name: database-release-container
+    restart: always
+    image: postgres:latest
+    volumes:
+      - ../db/:/var/lib/postgresql/data
+      - database-data:/var/lib/postgresql/data
+    environment:
+      - name=value
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+  health-check-server:
+    container_name: health-check-release-container
+    restart: always
+    build:
+      context: ./health-check
+      dockerfile: Dockerfile.release
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+
+# 데이터 저장을 위한 볼륨 디렉터리 정의
+volumes:
+  database-data:
+    driver: local/db
+  ai-model-data:
+    driver: local/ai-model-dataset
+  health-check-data:
+    driver: local/health-check-logdata
+# 서비스들의 상호작용 네트워크 정의
+networks:
+  web-network:
+    driver: bridge
+  server-network:
+    driver: bridge
+  ai-model-network:
+    driver: bridge
+  database-network:
+    driver: bridge
+  health-check-network:
+    driver: bridge
