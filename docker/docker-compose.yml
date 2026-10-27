@@ -2,6 +2,8 @@ services:
   web-app:
     container_name: web-release-container
     restart: always
+    environment:
+      - VITE_API_PROXY_TARGET=http://server-app:60001
     build:
       context: ./web
       dockerfile: Dockerfile.release

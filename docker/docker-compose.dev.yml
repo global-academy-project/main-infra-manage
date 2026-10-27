@@ -2,6 +2,8 @@ services:
   web-dev-app:
     container_name: web-dev-container
     restart: always
+    environment:
+      - VITE_API_PROXY_TARGET=http://server-dev-app:60001
     build:
       context: ./web
       dockerfile: Dockerfile.dev
