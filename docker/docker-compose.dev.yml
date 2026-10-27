@@ -1,77 +1,145 @@
 services:
   web-dev-app:
-    container_name: web-dev-container
+    container_name: web-dev-release-container
     restart: always
     environment:
-      - VITE_API_PROXY_TARGET=http://server-dev-app:60001
+      - VITE_API_PROXY_TARGET=http://server-app:60001
     build:
-      context: ./web
-      dockerfile: Dockerfile.dev
-  server-dev-app:
-    container_name: server-dev-container
+      context: ../../web
+      dockerfile: Dockerfile
+    networks:
+      - web-dev-network
+    ports:
+      - "${WEB_FRONTEND_PORT:-50001}:${WEB_FRONTEND_PORT:-50001}"
+
+  server-app:
+    container_name: server-release-container
     restart: always
+    build:
+      context: ../../server
+      dockerfile: Dockerfile
+    networks:
+      - server-dev-network
+    # WARNING: 서버에서 사용하는 Database의 Host는 외부 IP가 아닌 Docker Compose 내의 서비스 이름으로 정의해야 함 <DB_HOST=database-server>
     environment:
-      # WARNING: 서버에서 사용하는 Database의 Host는 외부 IP가 아닌 Docker Compose 내의 서비스 이름으로 정의해야 함 <DB_HOST=database-server>
-      - name=value
+      - SPRING_SERVER_PORT=${SPRING_SERVER_PORT}
+      - SPRING_MYSQL_HOST=${SPRING_MYSQL_HOST:database-server}
+      - SPRING_MYSQL_PORT=${SPRING_MYSQL_PORT:3306}
+      - SPRING_MYSQL_DATABASE=${SPRING_MYSQL_DATABASE}
+      - SPRING_MYSQL_USER=${SPRING_MYSQL_USER}
+      - SPRING_MYSQL_PASSWORD=${SPRING_MYSQL_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - APP_OCR_BASE_URL=${APP_OCR_BASE_URL}
+      - APP_OCR_CLIENT=${APP_OCR_CLIENT}
+    ports:
+      - "${SPRING_SERVER_PORT:-60001}:${SPRING_SERVER_PORT:-60001}"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:${SPRING_SERVER_PORT}/health"]
       interval: 1m30s
       timeout: 30s
       retries: 5
       start_period: 30s
-  ai-model-dev-server:
-    container_name: ai-model-dev-container
+    depends_on:
+      database-server:
+        condition: service_healthy
+      ai-model-server:
+        condition: service_healthy
+
+  ai-model-server:
+    container_name: ai-model-release-container
     restart: always
     build:
-      context: ./ai-model
-      dockerfile: Dockerfile.dev
-  database-dev-server:
-    container_name: database-dev-container
-    restart: always
-    build:
-      context: ./database
-      dockerfile: Dockerfile.dev
+      context: ../../ai-model
+      dockerfile: Dockerfile
+    networks:
+      - ai-model-dev-network
     environment:
-      - name=value
+      - APP_NAME=${APP_NAME}
+      - APP_VERSION=${APP_VERSION}
+      - APP_ENV=${APP_ENV}
+      - DEBUG=${DEBUG}
+      - AI_PROVIDER=${AI_PROVIDER}
+      - ENGINE=${ENGINE}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL}
+      - PDF_BACKEND=${PDF_BACKEND}
+      - DEFAULT_PDF_BACKEND=${DEFAULT_PDF_BACKEND}
+      - AI_TIMEOUT_SECONDS=30
+      - AI_MAX_OUTPUT_TOKENS=${AI_MAX_OUTPUT_TOKENS}
+      - NETWORK_MODE=${NETWORK_MODE}
+    ports:
+      - "${AI_MODEL_SERVER_PORT:-60100}:${AI_MODEL_SERVER_PORT:-60100}"
+    depends_on:
+      database-server:
+        condition: service_healthy
+      ai-model-server:
+        condition: service_healthy
+
+  database-server:
+    container_name: database-dev-release-container
+    restart: always
+    image: mysql:8.4.11-oraclelinux9
+    networks:
+      - database-dev-network
+    volumes:
+      - ../db/init:/docker-entrypoint-initdb.d:ro
+      - database-dev-data:/var/lib/mysql
+    environment:
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_HOST=${MYSQL_HOST}
+      - MYSQL_PORT=${MYSQL_PORT:-60010}
+    ports:
+      - "${MYSQL_PORT:-60010}:${MYSQL_PORT:-60010}"
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "postgres"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 1m30s
       timeout: 30s
       retries: 5
       start_period: 30s
-  health-check-dev-server:
-    container_name: health-check-dev-container
-    restart: always
-    build:
-      context: ./health-check
-      dockerfile: Dockerfile.dev
-    environment:
-      - name=value
-    
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 1m30s
-      timeout: 30s
-      retries: 5
-      start_period: 30s
+    depends_on:
+      server-app:
+        condition: service_healthy
+      ai-model-server:
+        condition: service_healthy
+
+  # health-check-server:
+  #   container_name: health-check-release-container
+  #   restart: always
+  #   build:
+  #     context: ./health-check
+  #     dockerfile: Dockerfile
+  #   networks:
+  #     - health-check-network
+  #   ports:
+  #     - "${GO_SERVER_PORT:60002}:${GO_SERVER_PORT:60002}"
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:${GO_SERVER_PORT}/health"]
+  #     interval: 1m30s
+  #     timeout: 30s
+  #     retries: 5
+  #     start_period: 30s
 
 # 데이터 저장을 위한 볼륨 디렉터리 정의
 volumes:
-  database-data:
-    driver: local/db
-  ai-model-data:
-    driver: local/ai-model-dataset
-  health-check-data:
-    driver: local/health-check-logdata
-# 서비스들의 상호작용 네트워크 정의
+  database-dev-data:
+    driver: local/main/db-dev
+  ai-model-dev-data:
+    driver: local/main/ai-model-dev-dataset
+  # health-check-data:
+  #   driver: local/main/health-check-logdata
+
+# 서비스들의 상호작용 네트워크 정의 <native, bridge>
 networks:
-  web-network:
-    driver: bridge
-  server-network:
-    driver: bridge
-  ai-model-network:
-    driver: bridge
-  database-network:
-    driver: bridge
-  health-check-network:
-    driver: bridge
+  web-dev-network:
+    driver: native
+  server-dev-network:
+    driver: native
+  ai-model-dev-network:
+    driver: native
+  database-dev-network:
+    driver: native
+  # health-check-network:
+  #   driver: native

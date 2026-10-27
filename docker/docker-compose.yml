@@ -5,18 +5,18 @@ services:
     environment:
       - VITE_API_PROXY_TARGET=http://server-app:60001
     build:
-      context: ./web
+      context: ../../main-vite-web
       dockerfile: Dockerfile
     networks:
       - web-network
     ports:
-      - "${WEB_FRONTEND_PORT:50001}:${WEB_FRONTEND_PORT:50001}"
+      - "${WEB_FRONTEND_PORT:-50001}:${WEB_FRONTEND_PORT:-50001}"
 
   server-app:
     container_name: server-release-container
     restart: always
     build:
-      context: ./server
+      context: ../../main-server
       dockerfile: Dockerfile
     networks:
       - server-network
@@ -32,7 +32,7 @@ services:
       - APP_OCR_BASE_URL=${APP_OCR_BASE_URL}
       - APP_OCR_CLIENT=${APP_OCR_CLIENT}
     ports:
-      - "${SPRING_SERVER_PORT:60001}:${SPRING_SERVER_PORT:60001}"
+      - "${SPRING_SERVER_PORT:-60001}:${SPRING_SERVER_PORT:-60001}"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${SPRING_SERVER_PORT}/health"]
       interval: 1m30s
@@ -49,7 +49,7 @@ services:
     container_name: ai-model-release-container
     restart: always
     build:
-      context: ./ai-model
+      context: ../../main-ai-model
       dockerfile: Dockerfile
     networks:
       - ai-model-network
@@ -68,7 +68,7 @@ services:
       - AI_MAX_OUTPUT_TOKENS=${AI_MAX_OUTPUT_TOKENS}
       - NETWORK_MODE=${NETWORK_MODE}
     ports:
-      - "${AI_MODEL_SERVER_PORT:60100}:${AI_MODEL_SERVER_PORT:60100}"
+      - "${AI_MODEL_SERVER_PORT:-60100}:${AI_MODEL_SERVER_PORT:-60100}"
     depends_on:
       database-server:
         condition: service_healthy
@@ -82,7 +82,7 @@ services:
     networks:
       - database-network
     volumes:
-      - ../db/:/var/lib/mysql
+      - ../db/init:/docker-entrypoint-initdb.d:ro
       - database-data:/var/lib/mysql
     environment:
       - MYSQL_DATABASE=${MYSQL_DATABASE}
@@ -90,9 +90,9 @@ services:
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - MYSQL_HOST=${MYSQL_HOST}
-      - MYSQL_PORT=${MYSQL_PORT}
+      - MYSQL_PORT=${MYSQL_PORT:-60010}
     ports:
-      - "${MYSQL_PORT:60010}:${MYSQL_PORT:60010}"
+      - "${MYSQL_PORT:-60010}:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 1m30s
