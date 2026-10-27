@@ -62,6 +62,7 @@ volumes:
     driver: local/ai-model-dataset
   health-check-data:
     driver: local/health-check-logdata
+
 # 서비스들의 상호작용 네트워크 정의
 networks:
   web-network:
