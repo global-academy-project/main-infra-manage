@@ -1,5 +1,5 @@
 services:
-  # Vite web application service (frontend)
+  #### Vite web application service (frontend)
   web-app:
     restart: always
     environment:
@@ -12,7 +12,7 @@ services:
     ports:
       - "${WEB_FRONTEND_PORT:-50001}:50001"
 
-  # Spring server application service (handles backend API requests)
+  #### Spring server application service (handles backend API requests)
   server-app:
     restart: always
     build:
@@ -21,10 +21,11 @@ services:
     networks:
       - server-network
       - web-network
+    container_name: server-app
     environment:
       # Use the Compose service DNS name, not a host-machine or legacy container name.
-      MYSQL_HOST: database-server
-      MYSQL_PORT: 3306
+      MYSQL_HOST: ${SPRING_MYSQL_HOST:-mysql-database-server}
+      MYSQL_PORT: ${SPRING_MYSQL_PORT:-3306}
       MYSQL_DATABASE: ${SPRING_MYSQL_DATABASE}
       MYSQL_USER: ${SPRING_MYSQL_USER}
       MYSQL_PASSWORD: ${SPRING_MYSQL_PASSWORD}
@@ -34,15 +35,16 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-!abc1234}
       APP_OCR_BASE_URL: ${APP_OCR_BASE_URL:-http://ai-model-server:60100}
       APP_OCR_CLIENT: ${APP_OCR_CLIENT:-mock}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
     ports:
       - "${SPRING_SERVER_PORT:-60001}:60001"
     depends_on:
-      database-server:
+      mysql-database-server:
         condition: service_healthy
       ai-model-server:
         condition: service_healthy
 
-  # AI model server service (handles AI-related tasks)
+  #### AI model server service (handles AI-related tasks)
   ai-model-server:
     restart: always
     build:
@@ -73,21 +75,44 @@ services:
       retries: 3
       start_period: 30s
 
-  # Database server service (MySQL)
-  database-server:
-    restart: always
-    image: mysql:8.4.11-oraclelinux9
-    command: ["mysqld", "--log-bin-trust-function-creators=1"]
+  #### Agent KB migration service
+  agent-kb-migrate:
+    image: flyway/flyway:10
+    command: -url=jdbc:mysql://mysql-database-server:3306/agent_kb?allowPublicKeyRetrieval=true -user=kb_owner -validateOnMigrate=true migrate
+    environment:
+      FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
     networks:
       - server-network
     volumes:
-      - ../db:/docker-entrypoint-initdb.d:ro
+      - ../../main-ai-model/db/migration:/flyway/sql:ro
+    depends_on:
+      mysql-database-server:
+        condition: service_healthy
+
+  #### Database server service (MySQL)
+  mysql-database-server:
+    container_name: mysql-database-server
+    restart: always
+    image: mysql:8.4.11-oraclelinux9
+    command: [
+      "mysqld",
+      "--log-bin-trust-function-creators=1",
+      "--default-time-zone=+09:00",
+      ]
+    networks:
+      - server-network
+    volumes:
+      - ../db/init:/docker-entrypoint-initdb.d:ro
       - database-data:/var/lib/mysql
     environment:
-      - MYSQL_DATABASE=${MYSQL_DATABASE}
-      - MYSQL_USER=${MYSQL_USER}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      TZ: ${TZ:-Asia/Seoul}
+      KB_OWNER_PASSWORD: ${KB_OWNER_PASSWORD}
+      KB_INGEST_PASSWORD: ${KB_INGEST_PASSWORD}
+      KB_READER_PASSWORD: ${KB_READER_PASSWORD}
     ports:
       - "${MYSQL_PORT:-60010}:3306"
     healthcheck:
@@ -97,9 +122,67 @@ services:
       retries: 5
       start_period: 30s
 
+  #### Qdrant vector database service
+  qdrant-server:
+    restart: always
+    container_name: qdrant-server
+    # image: qdrant/qdrant:1.19-debian13-dev
+    image: qdrant/qdrant:v1.20
+    networks:
+      - server-network
+    volumes:
+      - qdrant-data:/qdrant/storage
+    environment:
+      - QDRANT_SERVICE_API_KEY=${QDRANT_API_KEY}
+      - QDRANT_SERVICE_READ_ONLY_API_KEY=${QDRANT_READ_ONLY_API_KEY}
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -ec
+        - 'exec 3<>/dev/tcp/127.0.0.1/6333; printf "GET /readyz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3; IFS= read -r status <&3; [[ "$$status" == *" 200 "* ]]'
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  #### KB ingest service
+  kb-ingest:
+    build: ../../main-ai-model
+    command: uvicorn app.ingest_main:app --host 0.0.0.0 --port 8001
+    restart: on-failure
+    networks:
+      - server-network
+    environment:
+      QDRANT_URL: http://qdrant-server:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
+      KB_DB_HOST: mysql-database-server
+      KB_DB_PORT: "3306"
+      KB_DATABASE: agent_kb
+      KB_INGEST_PASSWORD: ${KB_INGEST_PASSWORD}
+      KB_INGEST_API_TOKEN: ${KB_INGEST_API_TOKEN:?KB_INGEST_API_TOKEN is required}
+      EMBEDDING_DIM: "1024"
+    ports:
+      - "127.0.0.1:${KB_INGEST_PORT:-8001}:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/ready', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      agent-kb-migrate:
+        condition: service_completed_successfully
+      qdrant-server:
+        condition: service_healthy
+
 # 데이터 저장을 위한 볼륨 디렉터리 정의
 volumes:
   database-data:
+    driver: local
+  qdrant-data:
     driver: local
 
 # 웹 앱과 서버 간 통신용 네트워크
