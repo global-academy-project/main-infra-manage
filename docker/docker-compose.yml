@@ -5,7 +5,7 @@ services:
     environment:
       - VITE_API_PROXY_TARGET=http://server-app:60001
     build:
-      context: ../../main-vite-web-main
+      context: ../../main-vite-web
       dockerfile: Dockerfile
     networks:
       - web-network
@@ -16,7 +16,7 @@ services:
   server-app:
     restart: always
     build:
-      context: ../../main-server-main
+      context: ../../main-server
       dockerfile: Dockerfile
     networks:
       - server-network
@@ -55,7 +55,7 @@ services:
       # - APP_VERSION=${APP_VERSION}
       # - APP_ENV=${APP_ENV}
       # - DEBUG=${DEBUG}
-      - AI_PROVIDER=${AI_PROVIDER}
+      # - AI_PROVIDER=${AI_PROVIDER}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_MODEL=${OPENAI_MODEL}
       # - PDF_BACKEND=${PDF_BACKEND}
