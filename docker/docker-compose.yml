@@ -103,6 +103,7 @@ services:
       - server-network
     volumes:
       - ../db/init:/docker-entrypoint-initdb.d:ro
+      - ../db/verify:/opt/db-verify:ro
       - database-data:/var/lib/mysql
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
