@@ -32,7 +32,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       # Creates a verified first ADMIN only when the database has no ADMIN account.
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@admin.com}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-!abc1234}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin5678!}
       APP_OCR_BASE_URL: ${APP_OCR_BASE_URL:-http://ai-model-server:60100}
       APP_OCR_CLIENT: ${APP_OCR_CLIENT:-mock}
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
@@ -66,21 +66,81 @@ services:
       - AI_MAX_OUTPUT_TOKENS=${AI_MAX_OUTPUT_TOKENS}
       - NETWORK_ENV=${NETWORK_ENV}
       - DEFAULT_LLM_ENGINE=${DEFAULT_LLM_ENGINE}
+      - EMBEDDING_URL=${EMBEDDING_URL}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+      - EMBEDDING_DIM=${EMBEDDING_DIM}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
+      - RAG_BACKEND=app.rag.tool_backend:build_search_backend
+      - RAG_SEARCH_TIMEOUT_SECONDS=${RAG_SEARCH_TIMEOUT_SECONDS:-60}
+      - QDRANT_URL=http://qdrant-server:6333
+      - QDRANT_READ_ONLY_API_KEY=${QDRANT_READ_ONLY_API_KEY:?QDRANT_READ_ONLY_API_KEY is required}
     ports:
       - "${AI_MODEL_SERVER_PORT:-60100}:60100"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:60100/health', timeout=2)"]
+      test: [
+        "CMD", 
+        "python", 
+        "-c", 
+        "import urllib.request; urllib.request.urlopen('http://127.0.0.1:60100/health', timeout=2)"
+      ]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 30s
+
+  embedding-server:
+    build:
+      context: ../../main-ai-model
+      dockerfile: Dockerfile
+    command:
+      [
+        "uvicorn", 
+        "app.rag.embedding_api:create_app",
+        "--factory",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000"
+      ]
+    restart: on-failure
+    networks:
+      - server-network
+    environment:
+      HF_HOME: /models/huggingface
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+      EMBEDDING_DIM: ${EMBEDDING_DIM}
+      EMBEDDING_DEVICE: cpu
+      EMBEDDING_LOCAL_FILES_ONLY: "false"
+      EMBEDDING_MAX_TOKENS: ${EMBEDDING_MAX_TOKENS:-8192}
+      EMBEDDING_MAX_BATCH_SIZE: ${EMBEDDING_MAX_BATCH_SIZE:-8}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+    volumes:
+      - embedding-data:/models/huggingface
+    ports:
+      - "127.0.0.1:${EMBEDDING_PORT:-60110}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD", 
+          "python", 
+          "-c", 
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=5)"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: ${EMBEDDING_START_PERIOD:-20m}
 
   #### Agent KB migration service
   agent-kb-migrate:
     image: flyway/flyway:10
     command: -url=jdbc:mysql://mysql-database-server:3306/agent_kb?allowPublicKeyRetrieval=true -user=kb_owner -validateOnMigrate=true migrate
     environment:
-      FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
+      # FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
+      EMBEDDING_URL: http://embedding-server:8000/v1/embeddings
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+      EMBEDDING_DIM: ${EMBEDDING_DIM}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
     networks:
       - server-network
     volumes:
@@ -94,10 +154,11 @@ services:
     container_name: mysql-database-server
     restart: always
     image: mysql:8.4.11-oraclelinux9
-    command: [
-      "mysqld",
-      "--log-bin-trust-function-creators=1",
-      "--default-time-zone=+09:00",
+    command: 
+      [
+        "mysqld",
+        "--log-bin-trust-function-creators=1",
+        "--default-time-zone=+09:00",
       ]
     networks:
       - server-network
@@ -168,7 +229,12 @@ services:
     ports:
       - "127.0.0.1:${KB_INGEST_PORT:-8001}:8001"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/ready', timeout=5)"]
+      test: [
+        "CMD", 
+        "python", 
+        "-c", 
+        "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/ready', timeout=5)"
+      ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -184,6 +250,8 @@ volumes:
   database-data:
     driver: local
   qdrant-data:
+    driver: local
+  embedding-data:
     driver: local
 
 # 웹 앱과 서버 간 통신용 네트워크
