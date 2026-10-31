@@ -31,8 +31,8 @@ services:
       MYSQL_PASSWORD: ${SPRING_MYSQL_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       # Creates a verified first ADMIN only when the database has no ADMIN account.
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@admin.com}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin5678!}
+      ADMIN_EMAIL: admin@test.com
+      ADMIN_PASSWORD: Admin5678!
       APP_OCR_BASE_URL: ${APP_OCR_BASE_URL:-http://ai-model-server:60100}
       APP_OCR_CLIENT: ${APP_OCR_CLIENT:-mock}
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
@@ -124,7 +124,7 @@ services:
           "CMD", 
           "python", 
           "-c", 
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=5)"
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:60110/ready', timeout=5)"
         ]
       interval: 30s
       timeout: 10s
@@ -136,8 +136,8 @@ services:
     image: flyway/flyway:10
     command: -url=jdbc:mysql://mysql-database-server:3306/agent_kb?allowPublicKeyRetrieval=true -user=kb_owner -validateOnMigrate=true migrate
     environment:
-      # FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
-      EMBEDDING_URL: http://embedding-server:8000/v1/embeddings
+      FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
+      EMBEDDING_URL: http://embedding-server:60110/v1/embeddings
       EMBEDDING_MODEL: ${EMBEDDING_MODEL}
       EMBEDDING_DIM: ${EMBEDDING_DIM}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}

@@ -1,0 +1,72 @@
+# Main development Dockerfile management for Compose services
+services:
+  #### Vite web application service
+  vite-web-application:
+    container_name: vite-web-container
+    build:
+      context: ../../main-vite-web
+      dockerfile: Dockerfile
+
+  #### Spring boot server application service
+  spring-boot-application:
+    container_name: spring-server-container
+    build:
+      context: ../../main-server
+      dockerfile: Dockerfile
+
+  #### Python HF AI model fastapi service
+  python-ai-model:
+    container_name: python-ai-container
+    build:
+      context: ../../main-ai-model
+      dockerfile: Dockerfile
+
+  #### Python search vector database embedding model
+  python-embedding-model:
+    container_name: python-embedding-container
+    build:
+      context: ../../main-ai-model
+      dockerfile: Dockerfile
+
+  #### MySQL main database server
+  database-mysql-server:
+    image: mysql:8.4-oraclelinux9
+    networks:
+      - default
+    volumes:
+      - ../db/init:/docker-container.d:ro
+      - database-data:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: mydb
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+
+  ## Qdrant vector database server
+  # qdrant-server:
+
+  ## Knowledge base migration service
+  kb-migrator:
+    container_name: kb-migrator-container
+    build:
+      context: ../../main-kb-migrator
+      dockerfile: Dockerfile
+
+  ## Knowledge base ingest service
+  kb-ingest:
+    container_name: kb-ingest-container
+    build:
+      context: ../../main-ai-model
+      dockerfile: Dockerfile
+  
+#----------------------------------------------------------------------------------
+
+#### Default network is bridge connection containers
+networks:
+  default:
+    driver: bridge
+
+#### Default volume is local storage
+volumes:
+  default:
+    driver: local
