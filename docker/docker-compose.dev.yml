@@ -3,70 +3,181 @@ services:
   #### Vite web application service
   vite-web-application:
     container_name: vite-web-container
+    restart: always
+    environment:
+      VITE_API_PROXY_TARGET: http://spring-boot-application:60001
+    networks: 
+      - default
     build:
       context: ../../main-vite-web
       dockerfile: Dockerfile
+    ports:
+      - "${WEB_FRONTEND_PORT}:${WEB_FRONTEND_PORT:-50001}"
 
   #### Spring boot server application service
   spring-boot-application:
     container_name: spring-server-container
+    restart: always
+    networks: 
+      - default
     build:
       context: ../../main-server
       dockerfile: Dockerfile
+    environment:
+      # Spring boot server in the running database lock the host is MySQL service name
+      MYSQL_HOST: database-mysql-server
+      # Spring boot server lock to database port is binding to MySQL default port
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      APP_OCR_BASE_URL: http://ai-model-server:60100
+      APP_AGENT_BASE_URL: http://ai-model-server:60100
+      APP_AGENT_CLIENT: ${APP_AGENT_CLIENT:-fastapi}
+      ADMIN_EMAIL: admin@admin.com
+      ADMIN_PASSWORD: "!abc123456"
 
   #### Python HF AI model fastapi service
   python-ai-model:
     container_name: python-ai-container
+    restart: always
+    networks: 
+      - default
     build:
       context: ../../main-ai-model
       dockerfile: Dockerfile
+    ports:
+      - "${AI_MODEL_PORT}:${AI_MODEL_PORT:-60100}"
 
   #### Python search vector database embedding model
   python-embedding-model:
     container_name: python-embedding-container
+    restart: always
+    networks: 
+      - default
     build:
       context: ../../main-ai-model
       dockerfile: Dockerfile
+    environment:
+      EMBEDDING_URL: ${EMBEDDING_URL}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+      EMBEDDING_DIM: ${EMBEDDING_DIM}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      TZ: ${TZ:-Asia/Seoul}
+      RAG_BACKEND: app.rag.tool_backend:build_search_backend
+      RAG_SEARCH_TIMEOUT_SECONDS: ${RAG_SEARCH_TIMEOUT_SECONDS:-60}
+    ports:
+      - "${EMBEDDING_MODEL_PORT}:${EMBEDDING_MODEL_PORT:-60110}"
 
   #### MySQL main database server
   database-mysql-server:
-    image: mysql:8.4-oraclelinux9
+    image: mysql:8-oraclelinux9
+    container_name: database-mysql-container
+    restart: always
     networks:
       - default
     volumes:
-      - ../db/init:/docker-container.d:ro
+      # Initialize database with scripts
+      - ../db/init:/docker-entrypoint-initdb.d:ro
+      # Verify volume for MySQL data
+      - ../db/verify:/opt/db-verify:ro
       - database-data:/var/lib/mysql
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: mydb
-      MYSQL_USER: user
-      MYSQL_PASSWORD: password
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      TZ: ${TZ:-Asia/Seoul}
+      KB_OWNER_PASSWORD: ${KB_OWNER_PASSWORD}
+      KB_INGEST_PASSWORD: ${KB_INGEST_PASSWORD}
+      KB_READER_PASSWORD: ${KB_READER_PASSWORD}
+    command: 
+      [
+        "mysqld",
+        "--log-bin-trust-function-creators=1",
+        "--default-time-zone=+09:00",
+      ]
+    ports:
+      - "${MYSQL_PORT}:3306"
 
   ## Qdrant vector database server
-  # qdrant-server:
+  qdrant-server:
+    image: qdrant/qdrant:v1.20
+    container_name: qdrant-server-container
+    restart: always
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - default
+    environment:
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
+      QDRANT_READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
+      DEBUG: True
+    ports:
+      - "${QDRANT_PORT}:${QDRANT_PORT:-6333}"
 
   ## Knowledge base migration service
   kb-migrator:
+    image: flyway/flyway:13.12-alpine
     container_name: kb-migrator-container
-    build:
-      context: ../../main-kb-migrator
-      dockerfile: Dockerfile
+    environment:
+      FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
+      KB_OWNER_USER: ${KB_OWNER_USER}
+      EMBEDDING_URL: http://python-embedding-model:60110/v1/embeddings
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+      EMBEDDING_DIM: ${EMBEDDING_DIM}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+    volumes:
+      - ../../main-ai-model/db/migration:/flyway/sql:ro
+    networks:
+      - default
+    command: [
+      "-url=jdbc:mysql://database-mysql-server:3306/agent_kb?allowPublicKeyRetrieval=true",
+      "-user=${KB_OWNER_USER}",
+      "-validateMigrationNaming=true",
+      "migrate"
+    ]
 
   ## Knowledge base ingest service
   kb-ingest:
+    restart: always
     container_name: kb-ingest-container
     build:
       context: ../../main-ai-model
       dockerfile: Dockerfile
+    environment:
+      QDRANT_URL: http://qdrant-server:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
+      KB_DB_HOST: mysql-database-server
+      KB_DB_PORT: 3306
+      KB_DATABASE: agent_kb
+      KB_INGEST_PASSWORD: ${KB_INGEST_PASSWORD}
+      KB_INGEST_API_TOKEN: ${KB_INGEST_API_TOKEN:?KB_INGEST_API_TOKEN is required}
+    networks:
+      - default
+    ports:
+      - "${KB_INGEST_PORT}:${KB_INGEST_PORT:-8001}"
   
 #----------------------------------------------------------------------------------
 
 #### Default network is bridge connection containers
+# bridge  :	같은 Docker 호스트의 컨테이너끼리 통신하는 가상 네트워크	일반적인 Compose 개발·배포
+# host    :	호스트 네트워크를 직접 사용	네트워크 격리를 없애야 하는 특수 상황
+# overlay :	여러 Docker 호스트에 걸친 네트워크	Docker Swarm
+# macvlan :	컨테이너에 별도 MAC 주소를 부여해 물리 LAN에 직접 연결	컨테이너를 독립 장비처럼 노출
+# ipvlan  :	컨테이너에 별도 IP 주소를 부여해 물리 LAN에 직접 연결	컨테이너를 독립 장비처럼 노출
+
 networks:
   default:
     driver: bridge
 
 #### Default volume is local storage
 volumes:
+  database-data:
+    driver: local
+  qdrant-data:
+    driver: local
   default:
     driver: local
