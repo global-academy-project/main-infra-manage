@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
 
-docker system prune -af
-docker image rm $(docker images -a -q)
+
+docker compose down -v
+docker volume prune -a -f
+docker image prune -a -f
+docker system prune -a -f
