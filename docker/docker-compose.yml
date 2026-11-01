@@ -12,7 +12,7 @@ services:
       context: ../../main-vite-web
       dockerfile: Dockerfile
     ports:
-      - "${WEB_FRONTEND_PORT}:${WEB_FRONTEND_PORT:-50001}"
+      - "${WEB_FRONTEND_PORT}:50001"
 
   #### Spring boot server application service
   spring-boot-application:
@@ -24,20 +24,22 @@ services:
       context: ../../main-server
       dockerfile: Dockerfile
     environment:
+      # Public bind environment
       # Spring boot server in the running database lock the host is MySQL service name
       MYSQL_HOST: database-mysql-server
       # Spring boot server lock to database port is binding to MySQL default port
       MYSQL_PORT: 3306
+      APP_OCR_BASE_URL: http://ai-model-server:60100
+      APP_AGENT_BASE_URL: http://ai-model-server:60100
+      ADMIN_EMAIL: admin@admin.com
+      ADMIN_PASSWORD: "!abc123456"
+      # Private bind environment
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
-      APP_OCR_BASE_URL: http://python-ai-model:60100
-      APP_AGENT_BASE_URL: http://python-ai-model:60100
       APP_AGENT_CLIENT: ${APP_AGENT_CLIENT:-fastapi}
-      ADMIN_EMAIL: admin@admin.com
-      ADMIN_PASSWORD: "!abc123456"
 
   #### Python HF AI model fastapi service
   python-ai-model:
@@ -50,11 +52,12 @@ services:
       dockerfile: Dockerfile
       target: ai
     environment:
+      # Public bind environment
       HF_HOME: /models/huggingface
+      EMBEDDING_URL: http://embedding-server:60110/v1/embeddings
+      # Private bind environment
       NETWORK_ENV: ${NETWORK_ENV:-OPEN}
       CHECK_RULES_TOOL: ${CHECK_RULES_TOOL:-MOCK}
-      EMBEDDING_URL: ${EMBEDDING_URL}
-      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
     volumes:
       - ai-model-cache:/models/huggingface
     ports:
@@ -71,15 +74,19 @@ services:
       dockerfile: Dockerfile
       target: embedding
     environment:
+      # Public bind environment
       HF_HOME: /models/huggingface
-      EMBEDDING_URL: ${EMBEDDING_URL}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
-      EMBEDDING_DIM: ${EMBEDDING_DIM}
+      EMBEDDING_URL: http://embedding-server:60110/v1/embeddings
+      EMBEDDING_MODEL: BAAI/bge-m3
+      EMBEDDING_DIM: "1024"
+      EMBEDDING_MAX_TOKENS: 8192
+      EMBEDDING_MAX_BATCH_SIZE: 8
       EMBEDDING_LOCAL_FILES_ONLY: "false"
-      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
-      TZ: ${TZ:-Asia/Seoul}
+      TZ: Asia/Seoul
       RAG_BACKEND: app.rag.tool_backend:build_search_backend
-      RAG_SEARCH_TIMEOUT_SECONDS: ${RAG_SEARCH_TIMEOUT_SECONDS:-60}
+      RAG_SEARCH_TIMEOUT_SECONDS: 60
+      # Private bind environment
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
     volumes:
       - embedding-model-cache:/models/huggingface
     ports:
@@ -96,14 +103,16 @@ services:
       # Initialize database with scripts
       - ../db/init:/docker-entrypoint-initdb.d:ro
       # Verify volume for MySQL data
-      - ../db/verify:/opt/db-verify:ro
+      - ../db/verify:/opt/verify:ro
       - database-data:/var/lib/mysql
     environment:
+      # Public bind environment
+      TZ: Asia/Seoul
+      # Private bind environment
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      TZ: ${TZ:-Asia/Seoul}
       KB_OWNER_PASSWORD: ${KB_OWNER_PASSWORD}
       KB_INGEST_PASSWORD: ${KB_INGEST_PASSWORD}
       KB_READER_PASSWORD: ${KB_READER_PASSWORD}
@@ -137,11 +146,15 @@ services:
     image: flyway/flyway:13.12-alpine
     container_name: kb-migrator-container
     environment:
-      FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
-      KB_OWNER_USER: ${KB_OWNER_USER}
+      # Public bind environment
+      KB_OWNER_USER: kb_owner
       EMBEDDING_URL: http://python-embedding-model:60110/v1/embeddings
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
-      EMBEDDING_DIM: ${EMBEDDING_DIM}
+      EMBEDDING_MODEL: BAAI/bge-m3
+      EMBEDDING_DIM: "1024"
+      EMBEDDING_MAX_TOKENS: 8192
+      EMBEDDING_MAX_BATCH_SIZE: 8
+      # Private bind environment
+      FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
     volumes:
       - ../../main-ai-model/db/migration:/flyway/sql:ro
@@ -150,7 +163,7 @@ services:
     command: 
       [
         "-url=jdbc:mysql://database-mysql-server:3306/agent_kb?allowPublicKeyRetrieval=true",
-        "-user=${KB_OWNER_USER}",
+        "-user=kb_owner",
         "-validateMigrationNaming=true",
         "migrate"
       ]
@@ -164,11 +177,13 @@ services:
       dockerfile: Dockerfile
       target: ingest
     environment:
+      # Public bind environment
       QDRANT_URL: http://qdrant-server:6333
-      QDRANT_API_KEY: ${QDRANT_API_KEY}
       KB_DB_HOST: database-mysql-server
-      KB_DB_PORT: 3306
       KB_DATABASE: agent_kb
+      # Private bind environment
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
+      KB_DB_PORT: ${MYSQL_PORT}
       KB_INGEST_PASSWORD: ${KB_INGEST_PASSWORD}
       KB_INGEST_API_TOKEN: ${KB_INGEST_API_TOKEN:?KB_INGEST_API_TOKEN is required}
     networks:
@@ -201,7 +216,6 @@ volumes:
     driver: local
   default:
     driver: local
-
 
 # services:
 #   #### Vite web application service (frontend)
