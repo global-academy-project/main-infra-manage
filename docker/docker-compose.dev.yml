@@ -54,10 +54,18 @@ services:
     environment:
       # Public bind environment
       HF_HOME: /models/huggingface
-      EMBEDDING_URL: http://embedding-server:60110/v1/embeddings
+      # RAG search client: calls the embedding server and queries Qdrant
+      RAG_BACKEND: app.rag.tool_backend:build_search_backend
+      RAG_SEARCH_TIMEOUT_SECONDS: 60
+      EMBEDDING_URL: http://python-embedding-model:60110/v1/embeddings
+      EMBEDDING_MODEL: BAAI/bge-m3
+      EMBEDDING_DIM: "1024"
+      QDRANT_URL: http://qdrant-server:6333
       # Private bind environment
       NETWORK_ENV: ${NETWORK_ENV:-OPEN}
       CHECK_RULES_TOOL: ${CHECK_RULES_TOOL:-MOCK}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      QDRANT_READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
     volumes:
       - ai-model-cache:/models/huggingface
     ports:
@@ -76,15 +84,12 @@ services:
     environment:
       # Public bind environment
       HF_HOME: /models/huggingface
-      EMBEDDING_URL: http://embedding-server:60110/v1/embeddings
       EMBEDDING_MODEL: BAAI/bge-m3
       EMBEDDING_DIM: "1024"
       EMBEDDING_MAX_TOKENS: 8192
       EMBEDDING_MAX_BATCH_SIZE: 8
       EMBEDDING_LOCAL_FILES_ONLY: "false"
       TZ: Asia/Seoul
-      RAG_BACKEND: app.rag.tool_backend:build_search_backend
-      RAG_SEARCH_TIMEOUT_SECONDS: 60
       # Private bind environment
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
     volumes:
