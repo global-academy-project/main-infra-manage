@@ -53,6 +53,7 @@ services:
       HF_HOME: /models/huggingface
       NETWORK_ENV: ${NETWORK_ENV:-OPEN}
       CHECK_RULES_TOOL: ${CHECK_RULES_TOOL:-MOCK}
+      EMBEDDING_URL: ${EMBEDDING_URL}
     volumes:
       - ai-model-cache:/models/huggingface
     ports:
