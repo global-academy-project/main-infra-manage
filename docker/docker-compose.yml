@@ -31,8 +31,6 @@ services:
       MYSQL_PORT: 3306
       APP_OCR_BASE_URL: http://ai-model-server:60100
       APP_AGENT_BASE_URL: http://ai-model-server:60100
-      ADMIN_EMAIL: admin@admin.com
-      ADMIN_PASSWORD: "!abc123456"
       # Private bind environment
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
