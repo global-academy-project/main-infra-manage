@@ -1,169 +1,99 @@
+# Main development Dockerfile management for Compose services
 services:
-  #### Vite web application service (frontend)
-  web-app:
+  #### Vite web application service
+  vite-web-application:
+    container_name: vite-web-container
     restart: always
     environment:
-      - VITE_API_PROXY_TARGET=http://server-app:60001
+      VITE_API_PROXY_TARGET: http://spring-boot-application:60001
+    networks: 
+      - default
     build:
       context: ../../main-vite-web
       dockerfile: Dockerfile
-    networks:
-      - web-network
     ports:
-      - "${WEB_FRONTEND_PORT:-50001}:50001"
+      - "${WEB_FRONTEND_PORT}:${WEB_FRONTEND_PORT:-50001}"
 
-  #### Spring server application service (handles backend API requests)
-  server-app:
+  #### Spring boot server application service
+  spring-boot-application:
+    container_name: spring-server-container
     restart: always
+    networks: 
+      - default
     build:
       context: ../../main-server
       dockerfile: Dockerfile
-    networks:
-      - server-network
-      - web-network
-    container_name: server-app
     environment:
-      # Use the Compose service DNS name, not a host-machine or legacy container name.
-      MYSQL_HOST: ${SPRING_MYSQL_HOST:-mysql-database-server}
-      MYSQL_PORT: ${SPRING_MYSQL_PORT:-3306}
-      MYSQL_DATABASE: ${SPRING_MYSQL_DATABASE}
-      MYSQL_USER: ${SPRING_MYSQL_USER}
-      MYSQL_PASSWORD: ${SPRING_MYSQL_PASSWORD}
+      # Spring boot server in the running database lock the host is MySQL service name
+      MYSQL_HOST: database-mysql-server
+      # Spring boot server lock to database port is binding to MySQL default port
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
-      # Creates a verified first ADMIN only when the database has no ADMIN account.
-      ADMIN_EMAIL: admin@test.com
-      ADMIN_PASSWORD: Admin5678!
-      APP_OCR_BASE_URL: ${APP_OCR_BASE_URL:-http://ai-model-server:60100}
-      APP_OCR_CLIENT: ${APP_OCR_CLIENT:-mock}
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
-    ports:
-      - "${SPRING_SERVER_PORT:-60001}:60001"
-    depends_on:
-      mysql-database-server:
-        condition: service_healthy
-      ai-model-server:
-        condition: service_healthy
+      APP_OCR_BASE_URL: http://python-ai-model:60100
+      APP_AGENT_BASE_URL: http://python-ai-model:60100
+      APP_AGENT_CLIENT: ${APP_AGENT_CLIENT:-fastapi}
+      ADMIN_EMAIL: admin@admin.com
+      ADMIN_PASSWORD: "!abc123456"
 
-  #### AI model server service (handles AI-related tasks)
-  ai-model-server:
+  #### Python HF AI model fastapi service
+  python-ai-model:
+    container_name: python-ai-container
     restart: always
+    networks: 
+      - default
     build:
       context: ../../main-ai-model
       dockerfile: Dockerfile
-    networks:
-      - server-network
-    environment:
-      # - APP_NAME=${APP_NAME}
-      # - APP_VERSION=${APP_VERSION}
-      # - APP_ENV=${APP_ENV}
-      # - DEBUG=${DEBUG}
-      # - AI_PROVIDER=${AI_PROVIDER}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=${OPENAI_MODEL}
-      # - PDF_BACKEND=${PDF_BACKEND}
-      # - DEFAULT_PDF_BACKEND=${DEFAULT_PDF_BACKEND}
-      - AI_TIMEOUT_SECONDS=30
-      - AI_MAX_OUTPUT_TOKENS=${AI_MAX_OUTPUT_TOKENS}
-      - NETWORK_ENV=${NETWORK_ENV}
-      - DEFAULT_LLM_ENGINE=${DEFAULT_LLM_ENGINE}
-      - EMBEDDING_URL=${EMBEDDING_URL}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
-      - EMBEDDING_DIM=${EMBEDDING_DIM}
-      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
-      - RAG_BACKEND=app.rag.tool_backend:build_search_backend
-      - RAG_SEARCH_TIMEOUT_SECONDS=${RAG_SEARCH_TIMEOUT_SECONDS:-60}
-      - QDRANT_URL=http://qdrant-server:6333
-      - QDRANT_READ_ONLY_API_KEY=${QDRANT_READ_ONLY_API_KEY:?QDRANT_READ_ONLY_API_KEY is required}
-    ports:
-      - "${AI_MODEL_SERVER_PORT:-60100}:60100"
-    healthcheck:
-      test: [
-        "CMD", 
-        "python", 
-        "-c", 
-        "import urllib.request; urllib.request.urlopen('http://127.0.0.1:60100/health', timeout=2)"
-      ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-
-  embedding-server:
-    build:
-      context: ../../main-ai-model
-      dockerfile: Dockerfile
-    command:
-      [
-        "uvicorn", 
-        "app.rag.embedding_api:create_app",
-        "--factory",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "8000"
-      ]
-    restart: on-failure
-    networks:
-      - server-network
+      target: ai
     environment:
       HF_HOME: /models/huggingface
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
-      EMBEDDING_DIM: ${EMBEDDING_DIM}
-      EMBEDDING_DEVICE: cpu
-      EMBEDDING_LOCAL_FILES_ONLY: "false"
-      EMBEDDING_MAX_TOKENS: ${EMBEDDING_MAX_TOKENS:-8192}
-      EMBEDDING_MAX_BATCH_SIZE: ${EMBEDDING_MAX_BATCH_SIZE:-8}
-      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      NETWORK_ENV: ${NETWORK_ENV:-OPEN}
+      CHECK_RULES_TOOL: ${CHECK_RULES_TOOL:-MOCK}
     volumes:
-      - embedding-data:/models/huggingface
+      - ai-model-cache:/models/huggingface
     ports:
-      - "127.0.0.1:${EMBEDDING_PORT:-60110}:8000"
-    healthcheck:
-      test:
-        [
-          "CMD", 
-          "python", 
-          "-c", 
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:60110/ready', timeout=5)"
-        ]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: ${EMBEDDING_START_PERIOD:-20m}
+      - "${AI_MODEL_PORT}:60100"
 
-  #### Agent KB migration service
-  agent-kb-migrate:
-    image: flyway/flyway:10
-    command: -url=jdbc:mysql://mysql-database-server:3306/agent_kb?allowPublicKeyRetrieval=true -user=kb_owner -validateOnMigrate=true migrate
+  #### Python search vector database embedding model
+  python-embedding-model:
+    container_name: python-embedding-container
+    restart: always
+    networks: 
+      - default
+    build:
+      context: ../../main-ai-model
+      dockerfile: Dockerfile
+      target: embedding
     environment:
-      FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
-      EMBEDDING_URL: http://embedding-server:60110/v1/embeddings
+      HF_HOME: /models/huggingface
+      EMBEDDING_URL: ${EMBEDDING_URL}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL}
       EMBEDDING_DIM: ${EMBEDDING_DIM}
+      EMBEDDING_LOCAL_FILES_ONLY: "false"
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
-    networks:
-      - server-network
+      TZ: ${TZ:-Asia/Seoul}
+      RAG_BACKEND: app.rag.tool_backend:build_search_backend
+      RAG_SEARCH_TIMEOUT_SECONDS: ${RAG_SEARCH_TIMEOUT_SECONDS:-60}
     volumes:
-      - ../../main-ai-model/db/migration:/flyway/sql:ro
-    depends_on:
-      mysql-database-server:
-        condition: service_healthy
+      - embedding-model-cache:/models/huggingface
+    ports:
+      - "${EMBEDDING_MODEL_PORT}:60110"
 
-  #### Database server service (MySQL)
-  mysql-database-server:
-    container_name: mysql-database-server
+  #### MySQL main database server
+  database-mysql-server:
+    image: mysql:8-oraclelinux9
+    container_name: database-mysql-container
     restart: always
-    image: mysql:8.4.11-oraclelinux9
-    command: 
-      [
-        "mysqld",
-        "--log-bin-trust-function-creators=1",
-        "--default-time-zone=+09:00",
-      ]
     networks:
-      - server-network
+      - default
     volumes:
+      # Initialize database with scripts
       - ../db/init:/docker-entrypoint-initdb.d:ro
+      # Verify volume for MySQL data
       - ../db/verify:/opt/db-verify:ro
       - database-data:/var/lib/mysql
     environment:
@@ -175,89 +105,362 @@ services:
       KB_OWNER_PASSWORD: ${KB_OWNER_PASSWORD}
       KB_INGEST_PASSWORD: ${KB_INGEST_PASSWORD}
       KB_READER_PASSWORD: ${KB_READER_PASSWORD}
+    command: 
+      [
+        "mysqld",
+        "--log-bin-trust-function-creators=1",
+        "--default-time-zone=+09:00",
+      ]
     ports:
-      - "${MYSQL_PORT:-60010}:3306"
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 1m30s
-      timeout: 30s
-      retries: 5
-      start_period: 30s
+      - "${MYSQL_PORT}:3306"
 
-  #### Qdrant vector database service
+  ## Qdrant vector database server
   qdrant-server:
-    restart: always
-    container_name: qdrant-server
-    # image: qdrant/qdrant:1.19-debian13-dev
     image: qdrant/qdrant:v1.20
-    networks:
-      - server-network
+    container_name: qdrant-server-container
+    restart: always
     volumes:
       - qdrant-data:/qdrant/storage
-    environment:
-      - QDRANT_SERVICE_API_KEY=${QDRANT_API_KEY}
-      - QDRANT_SERVICE_READ_ONLY_API_KEY=${QDRANT_READ_ONLY_API_KEY}
-    ports:
-      - "${QDRANT_PORT:-6333}:6333"
-    healthcheck:
-      test:
-        - CMD
-        - bash
-        - -ec
-        - 'exec 3<>/dev/tcp/127.0.0.1/6333; printf "GET /readyz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3; IFS= read -r status <&3; [[ "$$status" == *" 200 "* ]]'
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-
-  #### KB ingest service
-  kb-ingest:
-    build: ../../main-ai-model
-    command: uvicorn app.ingest_main:app --host 0.0.0.0 --port 8001
-    restart: on-failure
     networks:
-      - server-network
+      - default
+    environment:
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
+      QDRANT_READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
+      DEBUG: True
+    ports:
+      - "${QDRANT_PORT}:6333"
+
+  ## Knowledge base migration service
+  kb-migrator:
+    image: flyway/flyway:13.12-alpine
+    container_name: kb-migrator-container
+    environment:
+      FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
+      KB_OWNER_USER: ${KB_OWNER_USER}
+      EMBEDDING_URL: http://python-embedding-model:60110/v1/embeddings
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+      EMBEDDING_DIM: ${EMBEDDING_DIM}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+    volumes:
+      - ../../main-ai-model/db/migration:/flyway/sql:ro
+    networks:
+      - default
+    command: 
+      [
+        "-url=jdbc:mysql://database-mysql-server:3306/agent_kb?allowPublicKeyRetrieval=true",
+        "-user=${KB_OWNER_USER}",
+        "-validateMigrationNaming=true",
+        "migrate"
+      ]
+
+  ## Knowledge base ingest service
+  kb-ingest:
+    restart: always
+    container_name: kb-ingest-container
+    build:
+      context: ../../main-ai-model
+      dockerfile: Dockerfile
+      target: ingest
     environment:
       QDRANT_URL: http://qdrant-server:6333
       QDRANT_API_KEY: ${QDRANT_API_KEY}
-      KB_DB_HOST: mysql-database-server
-      KB_DB_PORT: "3306"
+      KB_DB_HOST: database-mysql-server
+      KB_DB_PORT: 3306
       KB_DATABASE: agent_kb
       KB_INGEST_PASSWORD: ${KB_INGEST_PASSWORD}
       KB_INGEST_API_TOKEN: ${KB_INGEST_API_TOKEN:?KB_INGEST_API_TOKEN is required}
-      EMBEDDING_DIM: "1024"
+    networks:
+      - default
     ports:
-      - "127.0.0.1:${KB_INGEST_PORT:-8001}:8001"
-    healthcheck:
-      test: [
-        "CMD", 
-        "python", 
-        "-c", 
-        "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/ready', timeout=5)"
-      ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    depends_on:
-      agent-kb-migrate:
-        condition: service_completed_successfully
-      qdrant-server:
-        condition: service_healthy
+      - "${KB_INGEST_PORT}:8001"
+  
+#----------------------------------------------------------------------------------
 
-# 데이터 저장을 위한 볼륨 디렉터리 정의
+#### Default network is bridge connection containers
+# bridge  :	같은 Docker 호스트의 컨테이너끼리 통신하는 가상 네트워크	일반적인 Compose 개발·배포
+# host    :	호스트 네트워크를 직접 사용	네트워크 격리를 없애야 하는 특수 상황
+# overlay :	여러 Docker 호스트에 걸친 네트워크	Docker Swarm
+# macvlan :	컨테이너에 별도 MAC 주소를 부여해 물리 LAN에 직접 연결	컨테이너를 독립 장비처럼 노출
+# ipvlan  :	컨테이너에 별도 IP 주소를 부여해 물리 LAN에 직접 연결	컨테이너를 독립 장비처럼 노출
+
+networks:
+  default:
+    driver: bridge
+
+#### Default volume is local storage
 volumes:
   database-data:
     driver: local
   qdrant-data:
     driver: local
-  embedding-data:
+  ai-model-cache:
+    driver: local
+  embedding-model-cache:
+    driver: local
+  default:
     driver: local
 
-# 웹 앱과 서버 간 통신용 네트워크
-networks:
-  web-network:
-    driver: bridge
-  # 서버, AI 서버, DB 간 통신용 네트워크
-  server-network:
-    driver: bridge
+
+# services:
+#   #### Vite web application service (frontend)
+#   web-app:
+#     restart: always
+#     environment:
+#       - VITE_API_PROXY_TARGET=http://server-app:60001
+#     build:
+#       context: ../../main-vite-web
+#       dockerfile: Dockerfile
+#     networks:
+#       - web-network
+#     ports:
+#       - "${WEB_FRONTEND_PORT:-50001}:50001"
+
+#   #### Spring server application service (handles backend API requests)
+#   server-app:
+#     restart: always
+#     build:
+#       context: ../../main-server
+#       dockerfile: Dockerfile
+#     networks:
+#       - server-network
+#       - web-network
+#     container_name: server-app
+#     environment:
+#       # Use the Compose service DNS name, not a host-machine or legacy container name.
+#       MYSQL_HOST: ${SPRING_MYSQL_HOST:-mysql-database-server}
+#       MYSQL_PORT: ${SPRING_MYSQL_PORT:-3306}
+#       MYSQL_DATABASE: ${SPRING_MYSQL_DATABASE}
+#       MYSQL_USER: ${SPRING_MYSQL_USER}
+#       MYSQL_PASSWORD: ${SPRING_MYSQL_PASSWORD}
+#       JWT_SECRET: ${JWT_SECRET}
+#       # Creates a verified first ADMIN only when the database has no ADMIN account.
+#       ADMIN_EMAIL: admin@test.com
+#       ADMIN_PASSWORD: Admin5678!
+#       APP_OCR_BASE_URL: ${APP_OCR_BASE_URL:-http://ai-model-server:60100}
+#       APP_OCR_CLIENT: ${APP_OCR_CLIENT:-mock}
+#       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+#     ports:
+#       - "${SPRING_SERVER_PORT:-60001}:60001"
+#     depends_on:
+#       mysql-database-server:
+#         condition: service_healthy
+#       ai-model-server:
+#         condition: service_healthy
+
+#   #### AI model server service (handles AI-related tasks)
+#   ai-model-server:
+#     restart: always
+#     build:
+#       context: ../../main-ai-model
+#       dockerfile: Dockerfile
+#     networks:
+#       - server-network
+#     environment:
+#       # - APP_NAME=${APP_NAME}
+#       # - APP_VERSION=${APP_VERSION}
+#       # - APP_ENV=${APP_ENV}
+#       # - DEBUG=${DEBUG}
+#       # - AI_PROVIDER=${AI_PROVIDER}
+#       - OPENAI_API_KEY=${OPENAI_API_KEY}
+#       - OPENAI_MODEL=${OPENAI_MODEL}
+#       # - PDF_BACKEND=${PDF_BACKEND}
+#       # - DEFAULT_PDF_BACKEND=${DEFAULT_PDF_BACKEND}
+#       - AI_TIMEOUT_SECONDS=30
+#       - AI_MAX_OUTPUT_TOKENS=${AI_MAX_OUTPUT_TOKENS}
+#       - NETWORK_ENV=${NETWORK_ENV}
+#       - DEFAULT_LLM_ENGINE=${DEFAULT_LLM_ENGINE}
+#       - EMBEDDING_URL=${EMBEDDING_URL}
+#       - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+#       - EMBEDDING_DIM=${EMBEDDING_DIM}
+#       - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
+#       - RAG_BACKEND=app.rag.tool_backend:build_search_backend
+#       - RAG_SEARCH_TIMEOUT_SECONDS=${RAG_SEARCH_TIMEOUT_SECONDS:-60}
+#       - QDRANT_URL=http://qdrant-server:6333
+#       - QDRANT_READ_ONLY_API_KEY=${QDRANT_READ_ONLY_API_KEY:?QDRANT_READ_ONLY_API_KEY is required}
+#     ports:
+#       - "${AI_MODEL_SERVER_PORT:-60100}:60100"
+#     healthcheck:
+#       test: [
+#         "CMD", 
+#         "python", 
+#         "-c", 
+#         "import urllib.request; urllib.request.urlopen('http://127.0.0.1:60100/health', timeout=2)"
+#       ]
+#       interval: 30s
+#       timeout: 5s
+#       retries: 3
+#       start_period: 30s
+
+#   embedding-server:
+#     build:
+#       context: ../../main-ai-model
+#       dockerfile: Dockerfile
+#     command:
+#       [
+#         "uvicorn", 
+#         "app.rag.embedding_api:create_app",
+#         "--factory",
+#         "--host",
+#         "0.0.0.0",
+#         "--port",
+#         "8000"
+#       ]
+#     restart: on-failure
+#     networks:
+#       - server-network
+#     environment:
+#       HF_HOME: /models/huggingface
+#       EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+#       EMBEDDING_DIM: ${EMBEDDING_DIM}
+#       EMBEDDING_DEVICE: cpu
+#       EMBEDDING_LOCAL_FILES_ONLY: "false"
+#       EMBEDDING_MAX_TOKENS: ${EMBEDDING_MAX_TOKENS:-8192}
+#       EMBEDDING_MAX_BATCH_SIZE: ${EMBEDDING_MAX_BATCH_SIZE:-8}
+#       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+#     volumes:
+#       - embedding-data:/models/huggingface
+#     ports:
+#       - "127.0.0.1:${EMBEDDING_PORT:-60110}:8000"
+#     healthcheck:
+#       test:
+#         [
+#           "CMD", 
+#           "python", 
+#           "-c", 
+#           "import urllib.request; urllib.request.urlopen('http://127.0.0.1:60110/ready', timeout=5)"
+#         ]
+#       interval: 30s
+#       timeout: 10s
+#       retries: 5
+#       start_period: ${EMBEDDING_START_PERIOD:-20m}
+
+#   #### Agent KB migration service
+#   agent-kb-migrate:
+#     image: flyway/flyway:10
+#     command: -url=jdbc:mysql://mysql-database-server:3306/agent_kb?allowPublicKeyRetrieval=true -user=kb_owner -validateOnMigrate=true migrate
+#     environment:
+#       FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
+#       EMBEDDING_URL: http://embedding-server:60110/v1/embeddings
+#       EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+#       EMBEDDING_DIM: ${EMBEDDING_DIM}
+#       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+#     networks:
+#       - server-network
+#     volumes:
+#       - ../../main-ai-model/db/migration:/flyway/sql:ro
+#     depends_on:
+#       mysql-database-server:
+#         condition: service_healthy
+
+#   #### Database server service (MySQL)
+#   mysql-database-server:
+#     container_name: mysql-database-server
+#     restart: always
+#     image: mysql:8.4.11-oraclelinux9
+#     command: 
+#       [
+#         "mysqld",
+#         "--log-bin-trust-function-creators=1",
+#         "--default-time-zone=+09:00",
+#       ]
+#     networks:
+#       - server-network
+#     volumes:
+#       - ../db/init:/docker-entrypoint-initdb.d:ro
+#       - ../db/verify:/opt/db-verify:ro
+#       - database-data:/var/lib/mysql
+#     environment:
+#       MYSQL_DATABASE: ${MYSQL_DATABASE}
+#       MYSQL_USER: ${MYSQL_USER}
+#       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+#       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+#       TZ: ${TZ:-Asia/Seoul}
+#       KB_OWNER_PASSWORD: ${KB_OWNER_PASSWORD}
+#       KB_INGEST_PASSWORD: ${KB_INGEST_PASSWORD}
+#       KB_READER_PASSWORD: ${KB_READER_PASSWORD}
+#     ports:
+#       - "${MYSQL_PORT:-60010}:3306"
+#     healthcheck:
+#       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+#       interval: 1m30s
+#       timeout: 30s
+#       retries: 5
+#       start_period: 30s
+
+#   #### Qdrant vector database service
+#   qdrant-server:
+#     restart: always
+#     container_name: qdrant-server
+#     # image: qdrant/qdrant:1.19-debian13-dev
+#     image: qdrant/qdrant:v1.20
+#     networks:
+#       - server-network
+#     volumes:
+#       - qdrant-data:/qdrant/storage
+#     environment:
+#       - QDRANT_SERVICE_API_KEY=${QDRANT_API_KEY}
+#       - QDRANT_SERVICE_READ_ONLY_API_KEY=${QDRANT_READ_ONLY_API_KEY}
+#     ports:
+#       - "${QDRANT_PORT:-6333}:6333"
+#     healthcheck:
+#       test:
+#         - CMD
+#         - bash
+#         - -ec
+#         - 'exec 3<>/dev/tcp/127.0.0.1/6333; printf "GET /readyz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3; IFS= read -r status <&3; [[ "$$status" == *" 200 "* ]]'
+#       interval: 30s
+#       timeout: 5s
+#       retries: 3
+#       start_period: 30s
+
+#   #### KB ingest service
+#   kb-ingest:
+#     build: ../../main-ai-model
+#     command: uvicorn app.ingest_main:app --host 0.0.0.0 --port 8001
+#     restart: on-failure
+#     networks:
+#       - server-network
+#     environment:
+#       QDRANT_URL: http://qdrant-server:6333
+#       QDRANT_API_KEY: ${QDRANT_API_KEY}
+#       KB_DB_HOST: mysql-database-server
+#       KB_DB_PORT: "3306"
+#       KB_DATABASE: agent_kb
+#       KB_INGEST_PASSWORD: ${KB_INGEST_PASSWORD}
+#       KB_INGEST_API_TOKEN: ${KB_INGEST_API_TOKEN:?KB_INGEST_API_TOKEN is required}
+#       EMBEDDING_DIM: "1024"
+#     ports:
+#       - "127.0.0.1:${KB_INGEST_PORT:-8001}:8001"
+#     healthcheck:
+#       test: [
+#         "CMD", 
+#         "python", 
+#         "-c", 
+#         "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/ready', timeout=5)"
+#       ]
+#       interval: 30s
+#       timeout: 10s
+#       retries: 3
+#       start_period: 60s
+#     depends_on:
+#       agent-kb-migrate:
+#         condition: service_completed_successfully
+#       qdrant-server:
+#         condition: service_healthy
+
+# # 데이터 저장을 위한 볼륨 디렉터리 정의
+# volumes:
+#   database-data:
+#     driver: local
+#   qdrant-data:
+#     driver: local
+#   embedding-data:
+#     driver: local
+
+# # 웹 앱과 서버 간 통신용 네트워크
+# networks:
+#   web-network:
+#     driver: bridge
+#   # 서버, AI 서버, DB 간 통신용 네트워크
+#   server-network:
+#     driver: bridge

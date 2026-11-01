@@ -48,8 +48,15 @@ services:
     build:
       context: ../../main-ai-model
       dockerfile: Dockerfile
+      target: ai
+    environment:
+      HF_HOME: /models/huggingface
+      NETWORK_ENV: ${NETWORK_ENV:-OPEN}
+      CHECK_RULES_TOOL: ${CHECK_RULES_TOOL:-MOCK}
+    volumes:
+      - ai-model-cache:/models/huggingface
     ports:
-      - "${AI_MODEL_PORT}:${AI_MODEL_PORT:-60100}"
+      - "${AI_MODEL_PORT}:60100"
 
   #### Python search vector database embedding model
   python-embedding-model:
@@ -60,16 +67,21 @@ services:
     build:
       context: ../../main-ai-model
       dockerfile: Dockerfile
+      target: embedding
     environment:
+      HF_HOME: /models/huggingface
       EMBEDDING_URL: ${EMBEDDING_URL}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL}
       EMBEDDING_DIM: ${EMBEDDING_DIM}
+      EMBEDDING_LOCAL_FILES_ONLY: "false"
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       TZ: ${TZ:-Asia/Seoul}
       RAG_BACKEND: app.rag.tool_backend:build_search_backend
       RAG_SEARCH_TIMEOUT_SECONDS: ${RAG_SEARCH_TIMEOUT_SECONDS:-60}
+    volumes:
+      - embedding-model-cache:/models/huggingface
     ports:
-      - "${EMBEDDING_MODEL_PORT}:${EMBEDDING_MODEL_PORT:-60110}"
+      - "${EMBEDDING_MODEL_PORT}:60110"
 
   #### MySQL main database server
   database-mysql-server:
@@ -116,7 +128,7 @@ services:
       QDRANT_READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
       DEBUG: True
     ports:
-      - "${QDRANT_PORT}:${QDRANT_PORT:-6333}"
+      - "${QDRANT_PORT}:6333"
 
   ## Knowledge base migration service
   kb-migrator:
@@ -133,12 +145,13 @@ services:
       - ../../main-ai-model/db/migration:/flyway/sql:ro
     networks:
       - default
-    command: [
-      "-url=jdbc:mysql://database-mysql-server:3306/agent_kb?allowPublicKeyRetrieval=true",
-      "-user=${KB_OWNER_USER}",
-      "-validateMigrationNaming=true",
-      "migrate"
-    ]
+    command: 
+      [
+        "-url=jdbc:mysql://database-mysql-server:3306/agent_kb?allowPublicKeyRetrieval=true",
+        "-user=${KB_OWNER_USER}",
+        "-validateMigrationNaming=true",
+        "migrate"
+      ]
 
   ## Knowledge base ingest service
   kb-ingest:
@@ -147,10 +160,11 @@ services:
     build:
       context: ../../main-ai-model
       dockerfile: Dockerfile
+      target: ingest
     environment:
       QDRANT_URL: http://qdrant-server:6333
       QDRANT_API_KEY: ${QDRANT_API_KEY}
-      KB_DB_HOST: mysql-database-server
+      KB_DB_HOST: database-mysql-server
       KB_DB_PORT: 3306
       KB_DATABASE: agent_kb
       KB_INGEST_PASSWORD: ${KB_INGEST_PASSWORD}
@@ -158,7 +172,7 @@ services:
     networks:
       - default
     ports:
-      - "${KB_INGEST_PORT}:${KB_INGEST_PORT:-8001}"
+      - "${KB_INGEST_PORT}:8001"
   
 #----------------------------------------------------------------------------------
 
@@ -178,6 +192,10 @@ volumes:
   database-data:
     driver: local
   qdrant-data:
+    driver: local
+  ai-model-cache:
+    driver: local
+  embedding-model-cache:
     driver: local
   default:
     driver: local
