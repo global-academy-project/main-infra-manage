@@ -209,5 +209,5 @@ INSERT INTO notification_recipients (notification_id, user_id) VALUES (LAST_INSE
 INSERT INTO record_access_logs (user_id, site_id, resource_type, resource_id, action) VALUES (@approver, @site, 'DOCUMENT', @doc, 'DOWNLOAD');
 INSERT INTO agent_feedback (run_id, user_id, rating, reason_code) VALUES (@run, @writer, 'DOWN', 'MISSING_HAZARD');
 
-ROLLBACK;
+COMMIT;
 SELECT '정상 흐름 점검 완료 (데이터는 되돌림)' AS result;
