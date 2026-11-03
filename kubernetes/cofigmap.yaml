@@ -22,54 +22,58 @@ spec:
     ports:
     - containerPort: 50001
 ---
-apiVersion: v1
-kind: Pod
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: spring-server-pod
   labels:
     app: spring-server
 spec:
   replicas: 1
-  containers:
-  - name: spring-server-container
-    image: <spring-server-image>
-    envFrom:
-    - configMapRef:
-        name: app-config
-    - secretRef:
-        name: app-secret
-    ports:
-    - containerPort: 60001
+  template:
+    metadata:
+      labels:
+        app: spring-server
+    spec:
+      containers:
+      - name: spring-server-container
+        image: <spring-server-image>
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secret
+        ports:
+        - containerPort: 60001
 ---
 apiVersion: v1
-kind: Pod
+kind: Deployment
 metadata:
   name: python-ai-pod
 spec:
   replicas: 1
-  containers:
-  - name: python-ai-container
-    image: <python-ai-image>
-    ports:
-    - containerPort: 60100
+  template:
+    metadata:
+      labels:
+        app: python-ai
+    spec:
+      containers:
+      - name: python-ai-container
+        image: <python-ai-image>
+        ports:
+        - containerPort: 60100
 
-  - name: python-embedding-container
-    image: <python-embedding-image>
-    ports:
-    - containerPort: 60110
+      - name: python-embedding-container
+        image: <python-embedding-image>
+        ports:
+        - containerPort: 60110
 ---
-apiVersion: v1
-kind: Pod
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: mysql-pod
 labels:
   app: mysql
-data:
-  MYSQL_HOST: database-mysql-server
-  MYSQL_PORT: "3306"
-  MYSQL_USER: user
-  MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-  MYSQL_DATABASE: ocrdb
 spec:
   replicas: 1
   containers:
@@ -94,3 +98,17 @@ spec:
     ports:
     - containerPort: 6333
 ---
+apiVersion: v1
+kind: Job
+metadata:
+  name: migration-job
+spec:
+  template:
+    metadata:
+      name: migration-job
+    spec:
+      containers:
+      - name: migration-container
+        image: <migration-image>
+      restartPolicy: OnFailure
+  backoffLimit: 4
