@@ -1,6 +1,7 @@
 # Private
 /docs/private-attachment
 .env
+.env.*
 
 #### IDE
 .vs/
