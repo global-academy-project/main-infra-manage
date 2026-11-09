@@ -1,5 +1,8 @@
+# `apiVersion`는 Kubernetes 리소스의 기본 API 버전을 지정하고,
 apiVersion: v1
+# `kind`는 리소스의 종류를 의미한다. [ConfigMap, Secret, Deployment, Job, Service, Ingress, ...etc]
 kind: ConfigMap
+# `metadata`는 리소스의 메타데이터를 정의하며, 이름(name)과 라벨(labels) 등을 포함한다.
 metadata:
   name: app-config
 
@@ -17,6 +20,7 @@ metadata:
   labels:
     app: web
 
+# `spec`는 리소스의 스펙(구성)을 정의하며, Deployment의 경우 replicas, selector, template 등을 포함한다.
 spec:
   replicas: 1
   selector:
