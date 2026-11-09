@@ -45,6 +45,9 @@ services:
   python-ai-model:
     container_name: python-ai-container
     restart: always
+    depends_on:
+      qdrant-init:
+        condition: service_completed_successfully
     networks: 
       - default
     build:
@@ -141,11 +144,35 @@ services:
     networks:
       - default
     environment:
-      QDRANT_API_KEY: ${QDRANT_API_KEY}
-      QDRANT_READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
+      # QDRANT_API_KEY: ${QDRANT_API_KEY}
+      # QDRANT_READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?QDRANT_API_KEY is required}
+      QDRANT__SERVICE__READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY:?QDRANT_READ_ONLY_API_KEY is required}
       DEBUG: True
+    healthcheck:
+      test: ["CMD", "bash", "-ec", "echo > /dev/tcp/127.0.0.1/6333"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
     ports:
       - "60011:6333"
+
+  ## One-time Qdrant collection and payload-index initialization
+  qdrant-init:
+    build:
+      context: ../../main-ai-model
+      dockerfile: Dockerfile
+      target: qdrant-init
+    environment:
+      QDRANT_URL: http://qdrant-server:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY:?QDRANT_API_KEY is required}
+      EMBEDDING_DIM: "1024"
+    depends_on:
+      qdrant-server:
+        condition: service_healthy
+    networks:
+      - default
 
   ## Knowledge base migration service
   kb-migrator:
@@ -163,7 +190,7 @@ services:
       FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
     volumes:
-      - ../../main-ai-model/db/migration:/flyway/sql:ro
+      - ../../main-ai-model/db/migration:/flyway/sql
     networks:
       - default
     command: 
@@ -178,6 +205,9 @@ services:
   kb-ingest:
     restart: always
     container_name: kb-ingest-container
+    depends_on:
+      qdrant-init:
+        condition: service_completed_successfully
     build:
       context: ../../main-ai-model
       dockerfile: Dockerfile
