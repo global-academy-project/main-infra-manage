@@ -227,10 +227,14 @@ services:
       KB_DB_PORT: 3306
       KB_INGEST_PASSWORD: ${KB_INGEST_PASSWORD}
       KB_INGEST_API_TOKEN: ${KB_INGEST_API_TOKEN:?KB_INGEST_API_TOKEN is required}
-      LOCAL_CHUNK_DIR: /data/law
+      LOCAL_CHUNK_ROOT: /data/out
       LOCAL_VECTOR_DIR: /data/vectors
     volumes:
-      - ../../main-ai-model/out/law:/data/law:ro
+      # - ../../main-ai-model/out/accidents:/data/accidents/law:ro
+      # - ../../main-ai-model/out/guides:/data/guides/law:ro
+      # - ../../main-ai-model/out/accidents/vectors:/data/accidents/vectors
+      # - ../../main-ai-model/out/guides/vectors:/data/guides/vectors
+      - ../../main-ai-model/out:/data/out:ro
       - ../../main-ai-model/out/vectors:/data/vectors
     networks:
       - default
