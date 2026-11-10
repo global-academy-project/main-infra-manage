@@ -18,21 +18,24 @@ kind: Deployment
 metadata:
   name: web-deployment
   labels:
-    app: web
+    app: react
 
 # `spec`는 리소스의 스펙(구성)을 정의하며, Deployment의 경우 replicas, selector, template 등을 포함한다.
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: web
+      app: react
   template:
     metadata:
       labels:
-        app: web
+        app: react
     spec:
       containers:
-        - name: web
+        - name: react
           image: web:latest
+          context: ../../main-vite-web
+          dockerfile: Dockerfile
           ports:
-            - containerPort: 80
+            # Static mapping of container port to host port 30001
+            - containerPort: 30001
