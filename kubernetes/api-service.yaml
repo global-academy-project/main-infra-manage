@@ -6,11 +6,11 @@ kind: ConfigMap
 metadata:
   name: app-config
 
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: app-secret
+# ---
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: app-secret
 
 ---
 apiVersion: v1
