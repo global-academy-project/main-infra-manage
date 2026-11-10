@@ -32,8 +32,8 @@ services:
       APP_OCR_BASE_URL: http://python-ai-model:60100
       APP_AGENT_BASE_URL: http://python-ai-model:60100
       # Private bind environment
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@admin.com}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-"!abc123456"}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
