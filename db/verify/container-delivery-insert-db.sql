@@ -1,8 +1,8 @@
 -- 정상 흐름 점검: 넣어보고 조회한 뒤 전부 되돌린다.
---  현장 드롭다운 → 시나리오 A(대화·되묻기) → B(차단) → C(아차사고 경고) → D(TBM·알림) → 서명·인쇄 문서
+-- 현장 드롭다운 → 시나리오 A(대화·되묻기) → B(차단) → C(아차사고 경고) → D(TBM·알림) → 서명·인쇄 문서
 START TRANSACTION;
 
--- ── 현장 2곳, 관리자 1명, 작성자 1명(두 현장), 승인자 1명(울산만)
+-- 현장 2곳, 관리자 1명, 작성자 1명(두 현장), 승인자 1명(울산만)
 INSERT INTO sites (name, mode, industry) VALUES ('울산 공장', 'VERIFY', '화학 플랜트');
 SET @site = LAST_INSERT_ID();
 INSERT INTO sites (name, mode, industry) VALUES ('여수 공장', 'VERIFY', '화학 플랜트');
