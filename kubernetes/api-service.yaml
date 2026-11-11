@@ -33,9 +33,14 @@ spec:
     spec:
       containers:
         - name: react
-          image: web:latest
-          context: ../../main-vite-web
-          dockerfile: Dockerfile
+          image: vite-web-application:latest
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
           ports:
             # Static mapping of container port to host port 30001
             - containerPort: 30001
