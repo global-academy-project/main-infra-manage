@@ -1,6 +1,10 @@
 # Main development Dockerfile management for Compose services
 services:
   #### Vite web application service
+  ## Not use compose features
+  # 1. Health Check
+  # 2. Volumes
+  # 3. Depends on
   vite-web-application:
     container_name: vite-web-container
     restart: always
@@ -38,16 +42,21 @@ services:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
-      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required}
       APP_AGENT_CLIENT: ${APP_AGENT_CLIENT:-fastapi}
+    depends_on:
+      database-mysql-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:60001/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   #### Python HF AI model fastapi service
   python-ai-model:
     container_name: python-ai-container
     restart: always
-    depends_on:
-      qdrant-init:
-        condition: service_completed_successfully
     networks: 
       - default
     build:
@@ -65,7 +74,9 @@ services:
       EMBEDDING_DIM: "1024"
       QDRANT_URL: http://qdrant-server:6333
       NETWORK_ENV: OPEN
+      INTERNAL_API_BASE_URL: http://spring-boot-application:60001
       # Private bind environment
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required}
       CHECK_RULES_TOOL: ${CHECK_RULES_TOOL:-MOCK}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       QDRANT_READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
@@ -74,6 +85,16 @@ services:
       - ai-model-cache:/models/huggingface
     ports:
       - "60100:60100"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:60100/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      qdrant-init:
+        condition: service_completed_successfully
+      qdrant-server:
+        condition: service_healthy
 
   #### Python search vector database embedding model
   python-embedding-model:
@@ -100,6 +121,14 @@ services:
       - embedding-model-cache:/models/huggingface
     ports:
       - "60110:60110"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:60110/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      kb-ingest:
+        condition: service_healthy
 
   #### MySQL main database server
   database-mysql-server:
@@ -133,6 +162,11 @@ services:
       ]
     ports:
       - "60010:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   ## Qdrant vector database server
   qdrant-server:
@@ -205,9 +239,6 @@ services:
   kb-ingest:
     restart: always
     container_name: kb-ingest-container
-    depends_on:
-      qdrant-init:
-        condition: service_completed_successfully
     build:
       context: ../../main-ai-model
       dockerfile: Dockerfile
@@ -240,6 +271,31 @@ services:
       - default
     ports:
       - "8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      qdrant-init:
+        condition: service_completed_successfully
+      qdrant-server:
+        condition: service_healthy
+      database-mysql-server:
+        condition: service_healthy
+  
+#----------------------------------------------------------------------------------
+
+  # test-jenkins:
+  #   image: jenkins/jenkins:slim-jdk25
+  #   container_name: test-jenkins-container
+  #   volumes:
+  #     - ../../main-infra-manage/docker/jenkins:/app/var/jenkins_home
+  #   networks:
+  #     - default
+  #   dns:
+  #     - 8.8.8.8
+  #     - 1.1.1.1
   
 #----------------------------------------------------------------------------------
 
