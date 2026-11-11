@@ -126,9 +126,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    depends_on:
-      kb-ingest:
-        condition: service_healthy
+    # depends_on:
+    #   kb-ingest:
+    #     condition: service_healthy
 
   #### MySQL main database server
   database-mysql-server:
