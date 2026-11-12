@@ -62,8 +62,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required}
       APP_AGENT_CLIENT: ${APP_AGENT_CLIENT:-fastapi}
-    # ports:
-    #   - "60001:60001"
+    ports:
+      - "60001:60001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:60001/actuator/health"]
       interval: 30s
@@ -143,8 +143,8 @@ services:
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
     volumes:
       - embedding-model-cache:/models/huggingface
-    # ports:
-    #   - "60110:60110"
+    ports:
+      - "60110:60110"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:60110/ready"]
       interval: 30s
