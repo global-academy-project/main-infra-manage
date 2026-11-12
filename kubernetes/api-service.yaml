@@ -1,46 +1,119 @@
-# `apiVersion`는 Kubernetes 리소스의 기본 API 버전을 지정하고,
 apiVersion: v1
-# `kind`는 리소스의 종류를 의미한다. [ConfigMap, Secret, Deployment, Job, Service, Ingress, ...etc]
 kind: ConfigMap
-# `metadata`는 리소스의 메타데이터를 정의하며, 이름(name)과 라벨(labels) 등을 포함한다.
 metadata:
-  name: app-config
-
-# ---
-# apiVersion: v1
-# kind: Secret
-# metadata:
-#   name: app-secret
+  name: config-public
+data:
+  key: .env.public
 
 ---
 apiVersion: v1
-kind: Deployment
+kind: PersistentVolumeClaim
 metadata:
-  name: web-deployment
-  labels:
-    app: react
-
-# `spec`는 리소스의 스펙(구성)을 정의하며, Deployment의 경우 replicas, selector, template 등을 포함한다.
+  name: mypvc
 spec:
-  replicas: 1
+  resources:
+    requests:
+      storage: 30Gi
+  # Volume mode for the persistent volume claim [Filesystem, Block]
+  # Currently set to Filesystem
+  volumeMode: Filesystem
+  # Volume access mode for the persistent volume claim [ReadWriteOnce, ReadOnlyMany, ReadWriteMany, ReadWriteOncePod]
+  # Currently set to ReadWriteOnce
+  accessModes:
+    - ReadWriteOnce
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service
+  labels:
+    app: mysql
+spec:
+  selector:
+    app: mysql-server
+
+  ports:
+    - protocol: TCP
+      port: 3306
+      targetPort: 3306
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant-service
+  labels:
+    app: qdrant
+
+spec:
+  selector:
+    app: qdrant-server
+
+  ports:
+    - protocol: TCP
+      port: 6333
+      targetPort: 6333
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql-server
+  labels:
+    app: mysql
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mysql-migrate
+  labels:
+    app: mysql-migrate
+
+spec:
+  template:
+    spec:
+      containers:
+        - name: mysql-migrate
+          image: flyway/flyway:13.12-alpine
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: qdrant-server
+  labels:
+    app: qdrant-server
+
+spec:
   selector:
     matchLabels:
-      app: react
+      app: qdrant-server
+  serviceName: "qdrant-service"
+  replicas: 1
   template:
     metadata:
       labels:
-        app: react
+        app: qdrant-server
     spec:
       containers:
-        - name: react
-          image: vite-web-application:latest
-          resources:
-            limits:
-              cpu: "500m"
-              memory: "256Mi"
-            requests:
-              cpu: "250m"
-              memory: "128Mi"
+        - name: qdrant-client-container
+          image: qdrant/qdrant:v1.2.0
           ports:
-            # Static mapping of container port to host port 30001
-            - containerPort: 30001
+            - containerPort: 6333
+          volumeMounts:
+            - name: qdrant-data
+              mountPath: /qdrant/storage
+      volumes:
+        - name: qdrant-data
+          persistentVolumeClaim:
+            claimName: mypvc
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: qdrant-init
+  labels:
+    app: qdrant-init
