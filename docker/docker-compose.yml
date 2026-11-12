@@ -1,3 +1,21 @@
+#### Architecture Notes
+#
+# Startup Order
+#
+# MySQL
+#   -> Flyway Migration
+#   -> Spring Boot
+#
+# Qdrant
+#   -> Qdrant Init
+#   -> Python AI Service
+#
+# Design Rationale
+#
+# - MySQL, Qdrant는 영속 데이터를 저장하므로 StatefulSet으로 이관 예정
+# - Flyway와 Qdrant Init은 일회성 초기화 작업이므로 Job으로 이관 예정
+# - depends_on은 기동 순서 제어용이며 운영 중 장애 복구를 보장하지 않음
+
 # Main development Dockerfile management for Compose services
 services:
   #### Vite web application service
@@ -44,14 +62,18 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required}
       APP_AGENT_CLIENT: ${APP_AGENT_CLIENT:-fastapi}
-    depends_on:
-      database-mysql-server:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:60001/actuator/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+    depends_on:
+      database-mysql-server:
+        condition: service_healthy
+      qdrant-server:
+        condition: service_healthy
+    # ports:
+    #   - "60001:60001"
 
   #### Python HF AI model fastapi service
   python-ai-model:
@@ -95,6 +117,8 @@ services:
         condition: service_completed_successfully
       qdrant-server:
         condition: service_healthy
+      python-embedding-model:
+        condition: service_healthy
 
   #### Python search vector database embedding model
   python-embedding-model:
@@ -119,16 +143,13 @@ services:
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
     volumes:
       - embedding-model-cache:/models/huggingface
-    ports:
-      - "60110:60110"
+    # ports:
+    #   - "60110:60110"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:60110/ready"]
       interval: 30s
       timeout: 10s
       retries: 3
-    # depends_on:
-    #   kb-ingest:
-    #     condition: service_healthy
 
   #### MySQL main database server
   database-mysql-server:
@@ -163,10 +184,41 @@ services:
     ports:
       - "60010:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "mysql -uroot -p$MYSQL_ROOT_PASSWORD -e 'SELECT 1'"]
       interval: 30s
       timeout: 10s
       retries: 3
+
+  ## Knowledge base migration service
+  kb-migrator:
+    image: flyway/flyway:13.12-alpine
+    container_name: kb-migrator-container
+    restart: "no"
+    environment:
+      # Public bind environment
+      KB_OWNER_USER: kb_owner
+      EMBEDDING_URL: http://python-embedding-model:60110/v1/embeddings
+      EMBEDDING_MODEL: BAAI/bge-m3
+      EMBEDDING_DIM: "1024"
+      EMBEDDING_MAX_TOKENS: 8192
+      EMBEDDING_MAX_BATCH_SIZE: 8
+      # Private bind environment
+      FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+    volumes:
+      - ../../main-ai-model/db/migration:/flyway/sql
+    networks:
+      - default
+    command: 
+      [
+        "-url=jdbc:mysql://database-mysql-server:3306/agent_kb?allowPublicKeyRetrieval=true",
+        "-user=kb_owner",
+        "-validateMigrationNaming=true",
+        "migrate"
+      ]
+    depends_on:
+      database-mysql-server:
+        condition: service_healthy
 
   ## Qdrant vector database server
   qdrant-server:
@@ -194,6 +246,7 @@ services:
 
   ## One-time Qdrant collection and payload-index initialization
   qdrant-init:
+    restart: "no"
     build:
       context: ../../main-ai-model
       dockerfile: Dockerfile
@@ -202,38 +255,11 @@ services:
       QDRANT_URL: http://qdrant-server:6333
       QDRANT_API_KEY: ${QDRANT_API_KEY:?QDRANT_API_KEY is required}
       EMBEDDING_DIM: "1024"
+    networks:
+      - default
     depends_on:
       qdrant-server:
         condition: service_healthy
-    networks:
-      - default
-
-  ## Knowledge base migration service
-  kb-migrator:
-    image: flyway/flyway:13.12-alpine
-    container_name: kb-migrator-container
-    environment:
-      # Public bind environment
-      KB_OWNER_USER: kb_owner
-      EMBEDDING_URL: http://python-embedding-model:60110/v1/embeddings
-      EMBEDDING_MODEL: BAAI/bge-m3
-      EMBEDDING_DIM: "1024"
-      EMBEDDING_MAX_TOKENS: 8192
-      EMBEDDING_MAX_BATCH_SIZE: 8
-      # Private bind environment
-      FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
-      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
-    volumes:
-      - ../../main-ai-model/db/migration:/flyway/sql
-    networks:
-      - default
-    command: 
-      [
-        "-url=jdbc:mysql://database-mysql-server:3306/agent_kb?allowPublicKeyRetrieval=true",
-        "-user=kb_owner",
-        "-validateMigrationNaming=true",
-        "migrate"
-      ]
 
   ## Knowledge base ingest service
   kb-ingest:
@@ -261,10 +287,6 @@ services:
       LOCAL_CHUNK_ROOT: /data/out
       LOCAL_VECTOR_DIR: /data/vectors
     volumes:
-      # - ../../main-ai-model/out/accidents:/data/accidents/law:ro
-      # - ../../main-ai-model/out/guides:/data/guides/law:ro
-      # - ../../main-ai-model/out/accidents/vectors:/data/accidents/vectors
-      # - ../../main-ai-model/out/guides/vectors:/data/guides/vectors
       - ../../main-ai-model/out:/data/out:ro
       - ../../main-ai-model/out/vectors:/data/vectors
     networks:
@@ -277,8 +299,6 @@ services:
       timeout: 10s
       retries: 3
     depends_on:
-      qdrant-init:
-        condition: service_completed_successfully
       qdrant-server:
         condition: service_healthy
       database-mysql-server:
