@@ -57,15 +57,15 @@ services:
       MYSQL_PORT: 3306
       APP_OCR_BASE_URL: http://python-ai-model:60100
       APP_AGENT_BASE_URL: http://python-ai-model:60100
+      APP_AGENT_CLIENT: fastapi
       # Private bind environment
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required}
-      APP_AGENT_CLIENT: ${APP_AGENT_CLIENT:-fastapi}
+      JWT_SECRET: ${JWT_SECRET}
     ports:
       - "60001:60001"
     dns:
