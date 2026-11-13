@@ -1,17 +1,21 @@
 #### Architecture Notes
 #
-# Startup Order
+# Container 시작 순서
+# React Vite Web
+#   -> None
 #
-# MySQL
-#   -> Flyway Migration
-#   -> Spring Boot
+# Spring Boot
+#   -> MySQL Client
+#   -> Qdrant Client
 #
-# Qdrant
-#   -> Qdrant Init
-#   -> Python AI Service
+# MySQL Flyway Migration
+#   -> MySQL Client
+#
+# Qdrant Init
+#   -> Qdrant Client
+#   -> MySQL Client
 #
 # Design Rationale
-#
 # - MySQL, Qdrant는 영속 데이터를 저장하므로 StatefulSet으로 이관 예정
 # - Flyway와 Qdrant Init은 일회성 초기화 작업이므로 Job으로 이관 예정
 # - depends_on은 기동 순서 제어용이며 운영 중 장애 복구를 보장하지 않음
@@ -19,10 +23,7 @@
 # Main development Dockerfile management for Compose services
 services:
   #### Vite web application service
-  ## Not use compose features
-  # 1. Health Check
-  # 2. Volumes
-  # 3. Depends on
+  ## 해당 서비스에서는 기능을 사용하지 않음 [healthcheck, volumes, depends_on]
   vite-web-application:
     container_name: vite-web-container
     restart: always
@@ -180,6 +181,7 @@ services:
         "mysqld",
         "--log-bin-trust-function-creators=1",
         "--default-time-zone=+09:00",
+        "source /var/lib/mysql/container-delivery-insert-db.sql"
       ]
     ports:
       - "60010:3306"
@@ -206,7 +208,8 @@ services:
       FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
     volumes:
-      - ../../main-ai-model/db/migration:/flyway/sql
+      # - ../../main-ai-model/db/migration:/flyway/sql
+      - ../db/migration:/flyway/sql
     networks:
       - default
     command: 
