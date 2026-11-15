@@ -17,16 +17,27 @@ permissions:
   issues: write
 
 jobs:
+  trivy_scan:
+    if: github.event_name == 'pull_request' && github.event.action == 'opened'
+    uses: ./.github/workflows/image-security.yml
+    permissions:
+      contents: read
+
   pull_request_apply:
+    needs: trivy_scan
     # closed(머지 포함) 시 PR body가 다시 덮어써지지 않도록 특정 action에서만 실행
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       contains(fromJSON('["opened"]'), github.event.action))
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'pull_request' &&
+        contains(fromJSON('["opened"]'), github.event.action))) &&
+      (needs.trivy_scan.result == 'success' || needs.trivy_scan.result == 'skipped')
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.repository.default_branch || github.ref }}
 
       - name: Detect locale and update PR body
         shell: bash
@@ -36,6 +47,7 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_API_URL: ${{ github.api_url }}
           PR_ASSIGNEES: ${{ github.event.pull_request.user.login }}
+          TRIVY_REPORT: ${{ needs.trivy_scan.outputs.summary }}
         run: |
           chmod +x .github/scripts/pull-request-temp-apply.sh
           ./.github/scripts/pull-request-temp-apply.sh
@@ -48,7 +60,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Detect locale and update issue body
         shell: bash

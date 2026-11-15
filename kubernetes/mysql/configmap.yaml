@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config
+
+#### WARNING: 절대 공개 가능한 정보만 추가하되 API 키나 비밀번호 혹은 토큰과 같은 민감한 정보는 포함하지 말것
+data:
+  key: value
