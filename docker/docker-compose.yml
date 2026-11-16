@@ -110,6 +110,7 @@ services:
       EMBEDDING_DIM: "1024"
       NETWORK_ENV: OPEN
       INTERNAL_API_BASE_URL: http://spring-boot-application:60001
+      QDRANT_URL: http://qdrant-server:6333
       # Private bind environment
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required}
       CHECK_RULES_TOOL: ${CHECK_RULES_TOOL:-MOCK}
