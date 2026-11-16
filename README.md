@@ -26,3 +26,8 @@ From the repository root, validate and start the database with:
 docker compose --env-file .\docker\.env -f .\docker\docker-compose.dev.yml config --quiet
 docker compose --env-file .\docker\.env -f .\docker\docker-compose.dev.yml up -d --wait database-mysql-server
 ```
+
+## Docker Compose configuration
+
+For the main Compose stack's recent image, healthcheck, volume, and environment
+variable notes, see [the Docker Compose configuration guide](docker/COMPOSE_CONFIGURATION.md).

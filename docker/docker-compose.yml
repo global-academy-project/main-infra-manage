@@ -22,6 +22,7 @@
 
 # Main development Dockerfile management for Compose services
 services:
+
   #### Vite web application service
   ## 해당 서비스에서는 기능을 사용하지 않음 [healthcheck, volumes, depends_on]
   vite-web-application:
@@ -58,16 +59,22 @@ services:
       APP_OCR_BASE_URL: http://python-ai-model:60100
       APP_AGENT_BASE_URL: http://python-ai-model:60100
       APP_AGENT_CLIENT: fastapi
+      STT_MODEL_NAME: whisper-small-ko
+      LLM_ADAPTERS: ${LLM_ADAPTERS:-}
+      VISION_MODEL_PATH: /models/huggingface/yolox/yolox_nano.onnx
+      VISION_HELMET_MODEL_PATH: /models/huggingface/yolox/helmet_nano.onnx
+      STT_MODEL_PATH: /models/huggingface/whisper-small-ko
       # Private bind environment
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required}
       JWT_SECRET: ${JWT_SECRET}
-    ports:
-      - "60001:60001"
+    volumes:
+      - ai-model-cache:/models/huggingface
+    # ports:
+    #   - "60001:60001"
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -101,7 +108,6 @@ services:
       EMBEDDING_URL: http://python-embedding-model:60110/v1/embeddings
       EMBEDDING_MODEL: BAAI/bge-m3
       EMBEDDING_DIM: "1024"
-      QDRANT_URL: http://qdrant-server:6333
       NETWORK_ENV: OPEN
       INTERNAL_API_BASE_URL: http://spring-boot-application:60001
       # Private bind environment
@@ -118,7 +124,7 @@ services:
       - 1.1.1.1
       - 8.8.8.8
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:60100/actuator/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:60100/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -153,13 +159,13 @@ services:
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
     volumes:
       - embedding-model-cache:/models/huggingface
-    ports:
-      - "60110:60110"
+    # ports:
+    #   - "60110:60110"
     dns:
       - 1.1.1.1
       - 8.8.8.8
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:60110/ready"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:60110/ready', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -200,7 +206,7 @@ services:
       - 1.1.1.1
       - 8.8.8.8
     healthcheck:
-      test: ["CMD-SHELL", "mysql -uroot -p $$MYSQL_ROOT_PASSWORD -e 'SELECT 1'"]
+      test: ["CMD-SHELL", "mysql -uroot --password=\"$$MYSQL_ROOT_PASSWORD\" -e 'SELECT 1'"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -317,7 +323,7 @@ services:
       - 1.1.1.1
       - 8.8.8.8
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/ready"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/ready', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -1,0 +1,369 @@
+#### Architecture Notes
+#
+# Container 시작 순서
+# React Vite Web
+#   -> None
+#
+# Spring Boot
+#   -> MySQL Client
+#   -> Qdrant Client
+#
+# MySQL Flyway Migration
+#   -> MySQL Client
+#
+# Qdrant Init
+#   -> Qdrant Client
+#   -> MySQL Client
+#
+# Design Rationale
+# - MySQL, Qdrant는 영속 데이터를 저장하므로 StatefulSet으로 이관 예정
+# - Flyway와 Qdrant Init은 일회성 초기화 작업이므로 Job으로 이관 예정
+# - depends_on은 기동 순서 제어용이며 운영 중 장애 복구를 보장하지 않음
+
+# Main development Dockerfile management for Compose services
+services:
+  #### Vite web application service
+  ## 해당 서비스에서는 기능을 사용하지 않음 [healthcheck, volumes, depends_on]
+  vite-web-application:
+    container_name: vite-web-container
+    restart: always
+    networks: 
+      - default
+    build:
+      context: ../../main-vite-web
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_PROXY_TARGET: http://spring-boot-application:60001
+    ports:
+      - "50001:50001"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+
+  #### Spring boot server application service
+  spring-boot-application:
+    container_name: spring-server-container
+    restart: always
+    networks: 
+      - default
+    build:
+      context: ../../main-server
+      dockerfile: Dockerfile
+    environment:
+      # Public bind environment
+      # Spring boot server in the running database lock the host is MySQL service name
+      MYSQL_HOST: database-mysql-server
+      # Spring boot server lock to database port is binding to MySQL default port
+      MYSQL_PORT: 3306
+      APP_OCR_BASE_URL: http://python-ai-model:60100
+      APP_AGENT_BASE_URL: http://python-ai-model:60100
+      APP_AGENT_CLIENT: fastapi
+      # Private bind environment
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required}
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "60001:60001"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:60001/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      database-mysql-server:
+        condition: service_healthy
+      qdrant-server:
+        condition: service_healthy
+
+  #### Python HF AI model fastapi service
+  python-ai-model:
+    container_name: python-ai-container
+    restart: always
+    networks: 
+      - default
+    build:
+      context: ../../main-ai-model
+      dockerfile: Dockerfile
+      target: ai
+    environment:
+      # Public bind environment
+      HF_HOME: /models/huggingface
+      # RAG search client: calls the embedding server and queries Qdrant
+      RAG_BACKEND: app.rag.tool_backend:build_search_backend
+      RAG_SEARCH_TIMEOUT_SECONDS: 60
+      EMBEDDING_URL: http://python-embedding-model:60110/v1/embeddings
+      EMBEDDING_MODEL: BAAI/bge-m3
+      EMBEDDING_DIM: "1024"
+      QDRANT_URL: http://qdrant-server:6333
+      NETWORK_ENV: OPEN
+      INTERNAL_API_BASE_URL: http://spring-boot-application:60001
+      # Private bind environment
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required}
+      CHECK_RULES_TOOL: ${CHECK_RULES_TOOL:-MOCK}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      QDRANT_READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
+      KOSHA_MSDS_SERVICE_KEY: ${KOSHA_MSDS_SERVICE_KEY:-}
+    volumes:
+      - ai-model-cache:/models/huggingface
+    ports:
+      - "60100:60100"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:60100/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      qdrant-init:
+        condition: service_completed_successfully
+      qdrant-server:
+        condition: service_healthy
+      python-embedding-model:
+        condition: service_healthy
+
+  #### Python search vector database embedding model
+  python-embedding-model:
+    container_name: python-embedding-container
+    restart: always
+    networks: 
+      - default
+    build:
+      context: ../../main-ai-model
+      dockerfile: Dockerfile
+      target: embedding
+    environment:
+      # Public bind environment
+      HF_HOME: /models/huggingface
+      EMBEDDING_MODEL: BAAI/bge-m3
+      EMBEDDING_DIM: "1024"
+      EMBEDDING_MAX_TOKENS: 8192
+      EMBEDDING_MAX_BATCH_SIZE: 8
+      EMBEDDING_LOCAL_FILES_ONLY: "false"
+      TZ: Asia/Seoul
+      # Private bind environment
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
+    volumes:
+      - embedding-model-cache:/models/huggingface
+    ports:
+      - "60110:60110"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:60110/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  #### MySQL main database server
+  database-mysql-server:
+    image: mysql:8-oraclelinux9
+    container_name: database-mysql-container
+    restart: always
+    networks:
+      - default
+    volumes:
+      # Initialize database with scripts
+      - ../db/init:/docker-entrypoint-initdb.d:ro
+      # Verify volume for MySQL data
+      - ../db/verify:/opt/verify:ro
+      - database-data:/var/lib/mysql
+    environment:
+      # Public bind environment
+      TZ: Asia/Seoul
+      # Private bind environment
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      KB_OWNER_PASSWORD: ${KB_OWNER_PASSWORD}
+      KB_INGEST_PASSWORD: ${KB_INGEST_PASSWORD}
+      KB_READER_PASSWORD: ${KB_READER_PASSWORD}
+    command: 
+      [
+        "mysqld",
+        "--log-bin-trust-function-creators=1",
+        "--default-time-zone=+09:00"
+      ]
+    ports:
+      - "60010:3306"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -uroot -p $$MYSQL_ROOT_PASSWORD -e 'SELECT 1'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  ## Knowledge base migration service
+  kb-migrator:
+    image: flyway/flyway:13.12-alpine
+    container_name: kb-migrator-container
+    restart: "no"
+    environment:
+      # Public bind environment
+      KB_OWNER_USER: kb_owner
+      EMBEDDING_URL: http://python-embedding-model:60110/v1/embeddings
+      EMBEDDING_MODEL: BAAI/bge-m3
+      EMBEDDING_DIM: "1024"
+      EMBEDDING_MAX_TOKENS: 8192
+      EMBEDDING_MAX_BATCH_SIZE: 8
+      # Private bind environment
+      FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+    volumes:
+      # - ../../main-ai-model/db/migration:/flyway/sql
+      - ../db/migration:/flyway/sql
+    networks:
+      - default
+    command: 
+      [
+        "-url=jdbc:mysql://database-mysql-server:3306/agent_kb?allowPublicKeyRetrieval=true",
+        "-user=kb_owner",
+        "-validateMigrationNaming=true",
+        "migrate"
+      ]
+    depends_on:
+      database-mysql-server:
+        condition: service_healthy
+
+  ## Qdrant vector database server
+  qdrant-server:
+    image: qdrant/qdrant:v1.20
+    container_name: qdrant-server-container
+    restart: always
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - default
+    environment:
+      # QDRANT_API_KEY: ${QDRANT_API_KEY}
+      # QDRANT_READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?QDRANT_API_KEY is required}
+      QDRANT__SERVICE__READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY:?QDRANT_READ_ONLY_API_KEY is required}
+      DEBUG: True
+    healthcheck:
+      test: ["CMD", "bash", "-ec", "echo > /dev/tcp/127.0.0.1/6333"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    ports:
+      - "60011:6333"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+
+  ## One-time Qdrant collection and payload-index initialization
+  qdrant-init:
+    restart: "no"
+    build:
+      context: ../../main-ai-model
+      dockerfile: Dockerfile
+      target: qdrant-init
+    environment:
+      QDRANT_URL: http://qdrant-server:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY:?QDRANT_API_KEY is required}
+      EMBEDDING_DIM: "1024"
+    networks:
+      - default
+    depends_on:
+      qdrant-server:
+        condition: service_healthy
+
+  ## Knowledge base ingest service
+  kb-ingest:
+    restart: always
+    container_name: kb-ingest-container
+    build:
+      context: ../../main-ai-model
+      dockerfile: Dockerfile
+      target: ingest
+    environment:
+      # Public bind environment
+      QDRANT_URL: http://qdrant-server:6333
+      EMBEDDING_URL: http://python-embedding-model:60110/v1/embeddings
+      EMBEDDING_MODEL: BAAI/bge-m3
+      EMBEDDING_DIM: "1024"
+      RAG_SEARCH_TIMEOUT_SECONDS: 60
+      KB_DB_HOST: database-mysql-server
+      KB_DATABASE: agent_kb
+      # Private bind environment
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      KB_DB_PORT: 3306
+      KB_INGEST_PASSWORD: ${KB_INGEST_PASSWORD}
+      KB_INGEST_API_TOKEN: ${KB_INGEST_API_TOKEN:?KB_INGEST_API_TOKEN is required}
+      LOCAL_CHUNK_ROOT: /data/out
+      LOCAL_VECTOR_DIR: /data/vectors
+    volumes:
+      - ../../main-ai-model/out:/data/out:ro
+      - ../../main-ai-model/out/vectors:/data/vectors
+    networks:
+      - default
+    ports:
+      - "8001:8001"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      qdrant-init:
+        condition: service_completed_successfully
+      qdrant-server:
+        condition: service_healthy
+      database-mysql-server:
+        condition: service_healthy
+  
+#----------------------------------------------------------------------------------
+
+  # test-jenkins:
+  #   image: jenkins/jenkins:slim-jdk25
+  #   container_name: test-jenkins-container
+  #   volumes:
+  #     - ../../main-infra-manage/docker/jenkins:/app/var/jenkins_home
+  #   networks:
+  #     - default
+  #   dns:
+  #     - 8.8.8.8
+  #     - 1.1.1.1
+  
+#----------------------------------------------------------------------------------
+
+#### Default network is bridge connection containers
+# bridge  :	같은 Docker 호스트의 컨테이너끼리 통신하는 가상 네트워크	일반적인 Compose 개발·배포
+# host    :	호스트 네트워크를 직접 사용	네트워크 격리를 없애야 하는 특수 상황
+# overlay :	여러 Docker 호스트에 걸친 네트워크	Docker Swarm
+# macvlan :	컨테이너에 별도 MAC 주소를 부여해 물리 LAN에 직접 연결	컨테이너를 독립 장비처럼 노출
+# ipvlan  :	컨테이너에 별도 IP 주소를 부여해 물리 LAN에 직접 연결	컨테이너를 독립 장비처럼 노출
+
+networks:
+  default:
+    driver: bridge
+  
+#### Default volume is local storage
+volumes:
+  database-data:
+    driver: local
+  qdrant-data:
+    driver: local
+  ai-model-cache:
+    driver: local
+  embedding-model-cache:
+    driver: local
+  default:
+    driver: local
