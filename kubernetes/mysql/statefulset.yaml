@@ -1,32 +1,59 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: mystatefulset
+  name: mysql-statefulset
 spec:
   selector:
     matchLabels:
       app: mysql
   serviceName: mysql-service
+  # Note: 현재 프로젝트 규모와 데이터 특성을 고려하여 단일 MySQL 인스턴스로 운영한다.
+  # 고가용성(HA) 또는 Replication 구성은 범위에 포함하지 않는다.
   replicas: 1
   template:
     metadata:
       labels:
         app: mysql
     spec:
+      #### Container Set
       containers:
       - name: mysql-client
-        image: mysql:8-oraclelinux9
+        # 기존 사용되는 이미지 8버전에서 8.4.13으로 변경하고, Oracle Linux 9 기반 이미지를 사용한다.
+        image: mysql:8.4.13-oraclelinux9
+        # Resource의 요청을 1Gi, 제한을 2Gi로 설정한다. 이에 대한 사유는 기본 컨테이너에서
+        # 유휴 상태임에 불구하고 Memory 가용량이 500MB에 근접하기 때문에 상한을 2Gi로 설정한다.
+        resources:
+          requests:
+            cpu: "1"
+            memory: "1Gi"
+          limits:
+            cpu: "2"
+            memory: "2Gi"
         ports:
+        # Container Port를 정의하는 것이 외부 접근(host connect)를 허용하는 것은 아니다.
+        # 외부 접근은 Service의 NodePort 설정으로 별도 구성한다.
         - containerPort: 3306
           name: mysql
         volumeMounts:
         - name: mysql-data
           mountPath: /var/lib/mysql
-  volumeClaimTemplates:
-  - metadata:
-      name: mysql-data
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      resources:
-        requests:
-          storage: 250Mi
+        - name: mysql-data
+          mountPath: /docker-entrypoint-initdb.d
+        envFrom:
+        - configMapRef:
+            name: mysql-config
+        - secretRef:
+            name: mysql-secret
+      #### Volume Set
+      volumes:
+      - name: mysql-data
+        persistentVolumeClaim:
+          claimName: mysql-data
+      #### Network Set
+      dnsPolicy: ClusterFirst
+      #### Command Line Set
+      command: [
+        "mysqld",
+        "--log-bin-trust-function-creators=1",
+        "--default-time-zone=+09:00"
+      ]
