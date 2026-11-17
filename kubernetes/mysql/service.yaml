@@ -5,9 +5,12 @@ metadata:
 spec:
   selector:
     app: mysql
+  type: NodePort
   ports:
     - protocol: TCP
+      # Docker Compose 환경에서는 60010:3306 포트 매핑을 사용했다. Kubernetes NodePort는 30000~32767 범위만 허용하므로,
+      # 30036 포트를 외부 접근용 NodePort로 사용한다.
+      # 애플리케이션은 클러스터 내부 Service(mysql:3306)를 통해 MySQL에 접근하므로 내부 서비스 포트는 3306으로 유지한다.
       port: 3306
       targetPort: 3306
-  type: NodePort
-  nodePort: 30036
+      nodePort: 30036
