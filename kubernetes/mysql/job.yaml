@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kb-init
+
+spec:
+  template:
+    spec:
+      # Job은 한번의 실행만 되도록 되어 있어 재시작이 필요하지 않기에 restartPolicy를 Never로 설정한다.
+      restartPolicy: Never
+      containers:
+      - name: kb-init-cont
+        # 일반 태그의 평균 이미지 크기가 약 480MB인 것을 확인해, 이미지 크기를 줄이기 위해 Alpine Linux 기반 태그를 사용한다.
+        # 해당 이미지는 Dockerfile 이미지로 대체하여 COPY를 추가해 Flyway 마이그레이션 SQL 파일을 이미지에 포함한다.
+        image: migration:v1.0.0
+        # envFrom을 사용해 ConfigMap과 Secret의 환경 변수를 컨테이너에 주입을 하는 방식으로 설계하고 있지만,
+        # 특정 환경 변수 값들을 개별적으로 주입하기 위해선 env:를 사용해야하고, envFrom과 함께 사용하면 개별 설정이 전체 설정을 덮어쓴다.
+        envFrom:
+        - configMapRef:
+            name: mysql-init-config
+        - secretRef:
+            name: mysql-init-secret
+        # volumeMounts:
+        # - name: mysql-data
+        #   mountPath: /flyway/sql
+        # Command-Line에서 MySQL의 주소가 compose 기준으로 database-mysql-server에서 kubernetes의 실제 서비스 이름인 mysql-client로 변경한다.
+        # Flyway는 command에 지정된 인자를 기본 실행 명령에 전달한다.
+        # command: [
+        #   "-url=jdbc:mysql://mysql-client:3306/agent_kb?allowPublicKeyRetrieval=true",
+        #   "-user=kb_owner",
+        #   "-validateMigrationNaming=true",
+        #   "migrate"
+        # ]
+      #### Volume Set
+      # volumes:
+      # - name: mysql-data
+      #   persistentVolumeClaim:
+      #     claimName: mysql-data
