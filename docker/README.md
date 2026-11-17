@@ -79,6 +79,35 @@ docker compose --env-file docker\.env -f docker\docker-compose.yml down
 
 첫 실행에서는 모델 다운로드와 DB 초기화로 준비 시간이 길어질 수 있습니다.
 
+### Terraform으로 로컬 Compose 실행
+
+[lab.tf](../kubernetes/lab.tf)는 로컬 Docker Desktop에서 기존 `docker-compose.yml`을
+실행하는 초안입니다. 서버나 Docker Desktop을 설치하지 않으며, 위의 Docker Compose
+준비 사항과 Terraform 1.4 이상이 필요합니다. `docker/.env`는 미리 준비해야 합니다.
+
+저장소 루트의 PowerShell에서 실행합니다.
+
+```powershell
+terraform -chdir=kubernetes init
+terraform -chdir=kubernetes plan
+terraform -chdir=kubernetes apply
+```
+
+`apply`는 `docker compose up -d --build`를 실행합니다. 기존 Compose 프로젝트를
+사용하므로 실행 중인 컨테이너가 설정에 따라 재생성될 수 있습니다.
+Terraform은 Compose 파일 변경을 감지하지만 컨테이너 상태, `.env`, SQL 및 다른
+프로젝트의 소스 변경은 추적하지 않습니다. 이 변경을 반영하거나 수동으로 중지한
+서비스를 다시 시작하려면 다음처럼 재실행합니다.
+
+```powershell
+terraform -chdir=kubernetes apply -replace=terraform_data.compose
+```
+
+Terraform 상태 파일은 로컬에 저장되므로 Git에 올리지 않습니다.
+`terraform destroy`는 Terraform 상태만 정리하며 Compose 서비스를 중지하거나
+볼륨을 삭제하지 않습니다. 서비스 중지는 위의 `docker compose ... down` 명령을
+사용합니다.
+
 ### 시작 의존성
 
 - Spring Boot는 MySQL과 Qdrant의 health check 통과를 기다립니다.
