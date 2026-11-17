@@ -61,3 +61,10 @@ out/
 
 # Kubernetes
 secret.yaml
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
