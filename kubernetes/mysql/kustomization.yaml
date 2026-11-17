@@ -12,6 +12,7 @@ configMapGenerator:
   - name: mysql-init-scripts
     files:
       - db/init/10-agent-kb.sh
+
   - name: mysql-verify-files
     files:
       - db/verify/container-delivery-insert-db.sql
