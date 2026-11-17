@@ -6,13 +6,34 @@ metadata:
 spec:
   template:
     spec:
+      initContainers:
+      - name: wait-for-mysql
+        image: mysql:8.4.13-oraclelinux9
+        env:
+        - name: MYSQL_PWD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-init-secret
+              key: FLYWAY_PASSWORD
+        command: ["sh", "-c"]
+        args:
+        - |
+          for attempt in $(seq 1 60); do
+            if mysql --protocol=tcp -h mysql-service -P 3306 -u kb_owner agent_kb -Nse "SELECT 1" >/dev/null 2>&1; then
+              echo "MySQL agent_kb is ready"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Timed out waiting for MySQL agent_kb"
+          exit 1
       # Job은 한번의 실행만 되도록 되어 있어 재시작이 필요하지 않기에 restartPolicy를 Never로 설정한다.
       restartPolicy: Never
       containers:
       - name: kb-init-cont
         # 일반 태그의 평균 이미지 크기가 약 480MB인 것을 확인해, 이미지 크기를 줄이기 위해 Alpine Linux 기반 태그를 사용한다.
         # 해당 이미지는 Dockerfile 이미지로 대체하여 COPY를 추가해 Flyway 마이그레이션 SQL 파일을 이미지에 포함한다.
-        image: migration:v1.0.0
+        image: mysql-migration:v1.0.0
         # envFrom을 사용해 ConfigMap과 Secret의 환경 변수를 컨테이너에 주입을 하는 방식으로 설계하고 있지만,
         # 특정 환경 변수 값들을 개별적으로 주입하기 위해선 env:를 사용해야하고, envFrom과 함께 사용하면 개별 설정이 전체 설정을 덮어쓴다.
         envFrom:
