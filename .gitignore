@@ -58,3 +58,6 @@ out/
 *.nar
 !gradle/wrapper/gradle-wrapper.jar
 !.mvn/wrapper/maven-wrapper.jar
+
+# Kubernetes
+secret.yaml
