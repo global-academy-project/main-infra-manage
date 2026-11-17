@@ -3,7 +3,7 @@
 ## 대상과 실행 위치
 
 - [docker-compose.yml](./docker-compose.yml): 웹, API, AI 모델, 데이터베이스와 초기화 작업을 함께 실행합니다.
-- [migration.Dockerfile](./migration.Dockerfile): Flyway와 SQL 마이그레이션 파일을 하나의 이미지로 패키징합니다. MySQL 서버 이미지는 아닙니다.
+- [migration.Dockerfile](./migration.Dockerfile): **Kubernetes Job에서 실행할 DB 마이그레이션용 이미지**를 빌드합니다. Flyway와 SQL 파일을 포함하며, MySQL 서버 이미지나 Docker Compose용 Dockerfile이 아닙니다.
 
 아래 PowerShell 명령은 모두 저장소 루트인 `main-infra-manage`에서 실행합니다.
 
@@ -25,17 +25,17 @@ Docker Desktop과 Docker Compose v2가 필요합니다. Compose가 빌드하는 
 
 ### 서비스와 접속 포트
 
-| 서비스 | 역할 | 호스트에서 접속 | 컨테이너 간 주소 |
-| --- | --- | --- | --- |
-| `vite-web-application` | Vite 웹 애플리케이션 | `http://localhost:50001` | `vite-web-application:50001` |
-| `spring-boot-application` | Spring Boot API | 직접 노출하지 않음 | `spring-boot-application:60001` |
-| `python-ai-model` | AI API | `http://localhost:60100` | `python-ai-model:60100` |
-| `python-embedding-model` | 임베딩 모델 API | 직접 노출하지 않음 | `python-embedding-model:60110` |
-| `database-mysql-server` | MySQL | `localhost:60010` | `database-mysql-server:3306` |
-| `kb-migrator` | Flyway 스키마 마이그레이션 | 해당 없음 | MySQL에 접속하는 일회성 작업 |
-| `qdrant-server` | 벡터 데이터베이스 | `http://localhost:60011` | `qdrant-server:6333` |
-| `qdrant-init` | Qdrant 컬렉션과 인덱스 초기화 | 해당 없음 | 일회성 작업 |
-| `kb-ingest` | 지식 데이터 적재 API | `http://localhost:8001` | `kb-ingest:8001` |
+| 서비스                    | 역할                          | 호스트에서 접속          | 컨테이너 간 주소                |
+| ------------------------- | ----------------------------- | ------------------------ | ------------------------------- |
+| `vite-web-application`    | Vite 웹 애플리케이션          | `http://localhost:50001` | `vite-web-application:50001`    |
+| `spring-boot-application` | Spring Boot API               | 직접 노출하지 않음       | `spring-boot-application:60001` |
+| `python-ai-model`         | AI API                        | `http://localhost:60100` | `python-ai-model:60100`         |
+| `python-embedding-model`  | 임베딩 모델 API               | 직접 노출하지 않음       | `python-embedding-model:60110`  |
+| `database-mysql-server`   | MySQL                         | `localhost:60010`        | `database-mysql-server:3306`    |
+| `kb-migrator`             | Flyway 스키마 마이그레이션    | 해당 없음                | MySQL에 접속하는 일회성 작업    |
+| `qdrant-server`           | 벡터 데이터베이스             | `http://localhost:60011` | `qdrant-server:6333`            |
+| `qdrant-init`             | Qdrant 컬렉션과 인덱스 초기화 | 해당 없음                | 일회성 작업                     |
+| `kb-ingest`               | 지식 데이터 적재 API          | `http://localhost:8001`  | `kb-ingest:8001`                |
 
 컨테이너끼리는 기본 bridge 네트워크에서 서비스 이름과 컨테이너 포트로 통신합니다. 예를 들어 MySQL에 접속할 때 호스트에서는 `localhost:60010`, 다른 컨테이너에서는 `database-mysql-server:3306`을 사용합니다.
 
@@ -45,14 +45,14 @@ Docker Desktop과 Docker Compose v2가 필요합니다. Compose가 빌드하는 
 
 로컬 전용 `docker/.env` 파일에 값을 준비합니다. 아래 명령은 이 파일을 `--env-file`로 명시해서 사용합니다. 실제 비밀번호와 토큰은 문서나 Git에 포함하지 않습니다.
 
-| 구분 | 환경변수 |
-| --- | --- |
-| 업무 DB | `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD` |
-| 지식 DB 계정 | `KB_OWNER_PASSWORD`, `KB_INGEST_PASSWORD`, `KB_READER_PASSWORD` |
-| 내부 API와 인증 | `INTERNAL_API_TOKEN`, `JWT_SECRET`, `KB_INGEST_API_TOKEN` |
-| Qdrant | `QDRANT_API_KEY`, `QDRANT_READ_ONLY_API_KEY` |
-| 임베딩 | `EMBEDDING_API_KEY` |
-| 선택 설정 | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `LLM_ADAPTERS`, `CHECK_RULES_TOOL`, `KOSHA_MSDS_SERVICE_KEY` |
+| 구분            | 환경변수                                                                                      |
+| --------------- | --------------------------------------------------------------------------------------------- |
+| 업무 DB         | `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`                       |
+| 지식 DB 계정    | `KB_OWNER_PASSWORD`, `KB_INGEST_PASSWORD`, `KB_READER_PASSWORD`                               |
+| 내부 API와 인증 | `INTERNAL_API_TOKEN`, `JWT_SECRET`, `KB_INGEST_API_TOKEN`                                     |
+| Qdrant          | `QDRANT_API_KEY`, `QDRANT_READ_ONLY_API_KEY`                                                  |
+| 임베딩          | `EMBEDDING_API_KEY`                                                                           |
+| 선택 설정       | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `LLM_ADAPTERS`, `CHECK_RULES_TOOL`, `KOSHA_MSDS_SERVICE_KEY` |
 
 Compose의 `${변수:?오류 메시지}`는 값이 비어 있으면 실행을 차단합니다. 이런 검사가 없는 변수도 애플리케이션이나 DB 초기화에서 필요할 수 있습니다. 특히 MySQL 초기화 스크립트는 세 가지 `KB_*_PASSWORD` 값을 요구합니다.
 
@@ -93,14 +93,14 @@ docker compose --env-file docker\.env -f docker\docker-compose.yml down
 
 Compose의 상대 마운트 경로는 `docker-compose.yml`이 있는 디렉터리 기준입니다.
 
-| 원본 | 컨테이너 경로 | 용도 |
-| --- | --- | --- |
-| [db/init](../db/init) | MySQL의 `/docker-entrypoint-initdb.d` | 초기 DB와 계정 생성, 읽기 전용 |
-| [db/verify](../db/verify) | MySQL의 `/opt/verify` | 검증 스크립트, 읽기 전용. 마운트만으로 자동 실행되지 않음 |
-| [db/migration](../db/migration) | Flyway의 `/flyway/sql` | 버전별 스키마 마이그레이션 |
-| `database-data` 볼륨 | MySQL의 `/var/lib/mysql` | MySQL 데이터 영속 저장 |
-| `qdrant-data` 볼륨 | Qdrant의 `/qdrant/storage` | 벡터 데이터 영속 저장 |
-| `ai-model-cache`, `embedding-model-cache` 볼륨 | 각 서비스의 `/models/huggingface` | 모델 캐시 |
+| 원본                                           | 컨테이너 경로                         | 용도                                                      |
+| ---------------------------------------------- | ------------------------------------- | --------------------------------------------------------- |
+| [db/init](../db/init)                          | MySQL의 `/docker-entrypoint-initdb.d` | 초기 DB와 계정 생성, 읽기 전용                            |
+| [db/verify](../db/verify)                      | MySQL의 `/opt/verify`                 | 검증 스크립트, 읽기 전용. 마운트만으로 자동 실행되지 않음 |
+| [db/migration](../db/migration)                | Flyway의 `/flyway/sql`                | 버전별 스키마 마이그레이션                                |
+| `database-data` 볼륨                           | MySQL의 `/var/lib/mysql`              | MySQL 데이터 영속 저장                                    |
+| `qdrant-data` 볼륨                             | Qdrant의 `/qdrant/storage`            | 벡터 데이터 영속 저장                                     |
+| `ai-model-cache`, `embedding-model-cache` 볼륨 | 각 서비스의 `/models/huggingface`     | 모델 캐시                                                 |
 
 MySQL 초기화 스크립트는 데이터 디렉터리가 비어 있는 최초 실행에만 자동 실행됩니다. 기존 볼륨에서는 환경변수나 스크립트를 수정해도 초기화가 반복되지 않습니다.
 
@@ -114,18 +114,20 @@ docker compose --env-file docker\.env -f docker\docker-compose.yml run --rm kb-m
 
 일반적인 `down`은 named volume을 보존합니다. **`down -v`는 DB와 모델 캐시 등 Compose가 관리하는 named volume을 삭제하므로, 데이터 초기화가 목적이 아니라면 사용하지 않습니다.**
 
-## migration.Dockerfile
+## migration.Dockerfile — Kubernetes용 DB 마이그레이션 이미지
 
 ### 역할
 
-현재 Compose는 공식 Flyway 이미지를 사용하고 SQL을 호스트에서 마운트합니다. `migration.Dockerfile`은 SQL을 이미지에 포함하는 별도 방식이며, 이미지를 빌드한다고 Compose가 자동으로 이 이미지로 전환되지는 않습니다.
+`migration.Dockerfile`은 **Kubernetes Job에서 DB 스키마 마이그레이션을 실행하기 위한 Dockerfile**입니다. 로컬 디렉터리를 직접 마운트하는 대신 SQL을 이미지에 포함해 클러스터에 배포합니다.
 
-| 설정 | 의미 |
-| --- | --- |
-| `FROM flyway/flyway:13.12-alpine` | Flyway 기반 이미지 |
-| `USER 65003:65003` | 이후 실행 시 사용할 UID/GID |
-| `COPY --chown=65003:65003 db/migration/ /flyway/sql/` | SQL을 이미지에 복사하고 소유자 지정 |
-| `CMD [...]` | 기반 이미지의 Flyway ENTRYPOINT에 전달할 기본 인자 |
+Docker Compose의 `kb-migrator`는 이 Dockerfile을 사용하지 않습니다. Compose는 공식 Flyway 이미지에 호스트의 SQL 디렉터리를 마운트하는 기존 방식을 사용합니다.
+
+| 설정                                                  | 의미                                               |
+| ----------------------------------------------------- | -------------------------------------------------- |
+| `FROM flyway/flyway:13.12-alpine`                     | Flyway 기반 이미지                                 |
+| `USER 65003:65003`                                    | 이후 실행 시 사용할 UID/GID                        |
+| `COPY --chown=65003:65003 db/migration/ /flyway/sql/` | SQL을 이미지에 복사하고 소유자 지정                |
+| `CMD [...]`                                           | 기반 이미지의 Flyway ENTRYPOINT에 전달할 기본 인자 |
 
 이미지 빌드 시에는 SQL을 복사할 뿐 DB에 접속하거나 마이그레이션을 실행하지 않습니다. 마이그레이션은 컨테이너 실행 시 수행됩니다.
 
@@ -144,14 +146,13 @@ docker build -f docker\migration.Dockerfile -t flyway-with-migrations:local .
 
 SQL을 변경한 경우 이미지를 다시 빌드해야 합니다.
 
-### 실행 환경에 맞출 항목
+### Kubernetes Job 실행 시 확인할 항목
 
 현재 Dockerfile의 기본 접속 대상은 Kubernetes Service 이름인 `mysql-service:3306/agent_kb`이며, 사용자는 `kb_owner`입니다.
 
 - Kubernetes에서는 해당 Service에 접근 가능한 네임스페이스/네트워크에서 실행하고, `FLYWAY_PASSWORD`를 Secret 등으로 주입해야 합니다.
 - 로컬 Docker에서 단독 실행하면 Kubernetes의 Service 이름이 자동으로 해석되지는 않습니다.
-- Compose에서 사용하려면 이미지를 지정하고 기존 `/flyway/sql` 마운트를 제거해야 이미지에 포함된 SQL을 사용합니다. 마운트를 유지하면 이미지의 SQL이 가려집니다.
-- Compose의 기존 `command`는 Dockerfile의 `CMD`를 덮어쓰므로, 현재 Compose 접속 대상인 `database-mysql-server:3306`이 사용됩니다.
+- Job의 컨테이너 이미지에 빌드한 이미지를 지정하고, `/flyway/sql`에 별도 볼륨을 마운트하지 않아야 이미지에 포함된 SQL을 사용합니다. 해당 경로에 마운트하면 이미지의 SQL이 가려집니다.
 - Kubernetes에서 Flyway 인자를 재정의할 때는 `args`를 사용합니다. `command`는 이미지의 ENTRYPOINT 자체를 대체합니다.
 - 다른 클러스터/노드에서 실행하려면 이미지 레지스트리에 push하는 등 실행 환경에서 이미지를 가져올 수 있도록 준비해야 합니다.
 
