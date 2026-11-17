@@ -1,27 +1,6 @@
-#### Architecture Notes
-#
-# Container 시작 순서
-# React Vite Web
-#   -> None
-#
-# Spring Boot
-#   -> MySQL Client
-#   -> Qdrant Client
-#
-# MySQL Flyway Migration
-#   -> MySQL Client
-#
-# Qdrant Init
-#   -> Qdrant Client
-#   -> MySQL Client
-#
-# Design Rationale
-# - MySQL, Qdrant는 영속 데이터를 저장하므로 StatefulSet으로 이관 예정
-# - Flyway와 Qdrant Init은 일회성 초기화 작업이므로 Job으로 이관 예정
-# - depends_on은 기동 순서 제어용이며 운영 중 장애 복구를 보장하지 않음
-
 # Main development Dockerfile management for Compose services
 services:
+
   #### Vite web application service
   ## 해당 서비스에서는 기능을 사용하지 않음 [healthcheck, volumes, depends_on]
   vite-web-application:
@@ -51,23 +30,30 @@ services:
       dockerfile: Dockerfile
     environment:
       # Public bind environment
-      # Spring boot server in the running database lock the host is MySQL service name
-      MYSQL_HOST: database-mysql-server
       # Spring boot server lock to database port is binding to MySQL default port
       MYSQL_PORT: 3306
       APP_OCR_BASE_URL: http://python-ai-model:60100
       APP_AGENT_BASE_URL: http://python-ai-model:60100
       APP_AGENT_CLIENT: fastapi
+      STT_MODEL_NAME: whisper-small-ko
+      LLM_ADAPTERS: ${LLM_ADAPTERS:-}
+      VISION_MODEL_PATH: /models/huggingface/yolox/yolox_nano.onnx
+      VISION_HELMET_MODEL_PATH: /models/huggingface/yolox/helmet_nano.onnx
+      STT_MODEL_PATH: /models/huggingface/whisper-small-ko
       # Private bind environment
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      # MySQL이 실행 중인 호스트는 MySQL 서비스 이름(mysql-service)로 설정한다.
+      MYSQL_HOST: ${MYSQL_HOST:-mysql-service}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_USER: ${MYSQL_USER:-}
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required}
       JWT_SECRET: ${JWT_SECRET}
-    ports:
-      - "60001:60001"
+    volumes:
+      - ai-model-cache:/models/huggingface
+    # ports:
+    #   - "60001:60001"
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -77,8 +63,8 @@ services:
       timeout: 10s
       retries: 3
     depends_on:
-      database-mysql-server:
-        condition: service_healthy
+      # database-mysql-server:
+      #   condition: service_healthy
       qdrant-server:
         condition: service_healthy
 
@@ -101,9 +87,9 @@ services:
       EMBEDDING_URL: http://python-embedding-model:60110/v1/embeddings
       EMBEDDING_MODEL: BAAI/bge-m3
       EMBEDDING_DIM: "1024"
-      QDRANT_URL: http://qdrant-server:6333
       NETWORK_ENV: OPEN
       INTERNAL_API_BASE_URL: http://spring-boot-application:60001
+      QDRANT_URL: http://qdrant-server:6333
       # Private bind environment
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required}
       CHECK_RULES_TOOL: ${CHECK_RULES_TOOL:-MOCK}
@@ -118,7 +104,7 @@ services:
       - 1.1.1.1
       - 8.8.8.8
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:60100/actuator/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:60100/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -145,97 +131,97 @@ services:
       HF_HOME: /models/huggingface
       EMBEDDING_MODEL: BAAI/bge-m3
       EMBEDDING_DIM: "1024"
-      EMBEDDING_MAX_TOKENS: 8192
-      EMBEDDING_MAX_BATCH_SIZE: 8
+      EMBEDDING_MAX_TOKENS: "8192"
+      EMBEDDING_MAX_BATCH_SIZE: "8"
       EMBEDDING_LOCAL_FILES_ONLY: "false"
       TZ: Asia/Seoul
       # Private bind environment
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY}
     volumes:
       - embedding-model-cache:/models/huggingface
-    ports:
-      - "60110:60110"
+    # ports:
+    #   - "60110:60110"
     dns:
       - 1.1.1.1
       - 8.8.8.8
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:60110/ready"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:60110/ready', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
 
   #### MySQL main database server
-  database-mysql-server:
-    image: mysql:8-oraclelinux9
-    container_name: database-mysql-container
-    restart: always
-    networks:
-      - default
-    volumes:
-      # Initialize database with scripts
-      - ../db/init:/docker-entrypoint-initdb.d:ro
-      # Verify volume for MySQL data
-      - ../db/verify:/opt/verify:ro
-      - database-data:/var/lib/mysql
-    environment:
-      # Public bind environment
-      TZ: Asia/Seoul
-      # Private bind environment
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      KB_OWNER_PASSWORD: ${KB_OWNER_PASSWORD}
-      KB_INGEST_PASSWORD: ${KB_INGEST_PASSWORD}
-      KB_READER_PASSWORD: ${KB_READER_PASSWORD}
-    command: 
-      [
-        "mysqld",
-        "--log-bin-trust-function-creators=1",
-        "--default-time-zone=+09:00"
-      ]
-    ports:
-      - "60010:3306"
-    dns:
-      - 1.1.1.1
-      - 8.8.8.8
-    healthcheck:
-      test: ["CMD-SHELL", "mysql -uroot -p $$MYSQL_ROOT_PASSWORD -e 'SELECT 1'"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+  # database-mysql-server:
+  #   image: mysql:8.4.13-oraclelinux9
+  #   container_name: database-mysql-container
+  #   restart: always
+  #   networks:
+  #     - default
+  #   volumes:
+  #     # Initialize database with scripts
+  #     - ../db/init:/docker-entrypoint-initdb.d:ro
+  #     # Verify volume for MySQL data
+  #     - ../db/verify:/opt/verify:ro
+  #     - database-data:/var/lib/mysql
+  #   environment:
+  #     # Public bind environment
+  #     TZ: Asia/Seoul
+  #     # Private bind environment
+  #     MYSQL_DATABASE: ${MYSQL_DATABASE}
+  #     MYSQL_USER: ${MYSQL_USER}
+  #     MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+  #     MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+  #     KB_OWNER_PASSWORD: ${KB_OWNER_PASSWORD}
+  #     KB_INGEST_PASSWORD: ${KB_INGEST_PASSWORD}
+  #     KB_READER_PASSWORD: ${KB_READER_PASSWORD}
+  #   command: 
+  #     [
+  #       "mysqld",
+  #       "--log-bin-trust-function-creators=1",
+  #       "--default-time-zone=+09:00"
+  #     ]
+  #   ports:
+  #     - "60010:3306"
+  #   dns:
+  #     - 1.1.1.1
+  #     - 8.8.8.8
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "mysql -uroot --password=\"$$MYSQL_ROOT_PASSWORD\" -e 'SELECT 1'"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
 
   ## Knowledge base migration service
-  kb-migrator:
-    image: flyway/flyway:13.12-alpine
-    container_name: kb-migrator-container
-    restart: "no"
-    environment:
-      # Public bind environment
-      KB_OWNER_USER: kb_owner
-      EMBEDDING_URL: http://python-embedding-model:60110/v1/embeddings
-      EMBEDDING_MODEL: BAAI/bge-m3
-      EMBEDDING_DIM: "1024"
-      EMBEDDING_MAX_TOKENS: 8192
-      EMBEDDING_MAX_BATCH_SIZE: 8
-      # Private bind environment
-      FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
-      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
-    volumes:
-      # - ../../main-ai-model/db/migration:/flyway/sql
-      - ../db/migration:/flyway/sql
-    networks:
-      - default
-    command: 
-      [
-        "-url=jdbc:mysql://database-mysql-server:3306/agent_kb?allowPublicKeyRetrieval=true",
-        "-user=kb_owner",
-        "-validateMigrationNaming=true",
-        "migrate"
-      ]
-    depends_on:
-      database-mysql-server:
-        condition: service_healthy
+  # kb-migrator:
+  #   image: flyway/flyway:13.12-alpine
+  #   container_name: kb-migrator-container
+  #   restart: "no"
+  #   environment:
+  #     # Public bind environment
+  #     KB_OWNER_USER: kb_owner
+  #     EMBEDDING_URL: http://python-embedding-model:60110/v1/embeddings
+  #     EMBEDDING_MODEL: BAAI/bge-m3
+  #     EMBEDDING_DIM: "1024"
+  #     EMBEDDING_MAX_TOKENS: "8192"
+  #     EMBEDDING_MAX_BATCH_SIZE: "8"
+  #     # Private bind environment
+  #     FLYWAY_PASSWORD: ${KB_OWNER_PASSWORD:?KB_OWNER_PASSWORD is required}
+  #     EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+  #   volumes:
+  #     # - ../../main-ai-model/db/migration:/flyway/sql
+  #     - ../db/migration:/flyway/sql
+  #   networks:
+  #     - default
+  #   command: 
+  #     [
+  #       "-url=jdbc:mysql://database-mysql-server:3306/agent_kb?allowPublicKeyRetrieval=true",
+  #       "-user=kb_owner",
+  #       "-validateMigrationNaming=true",
+  #       "migrate"
+  #     ]
+  #   depends_on:
+  #     database-mysql-server:
+  #       condition: service_healthy
 
   ## Qdrant vector database server
   qdrant-server:
@@ -251,7 +237,7 @@ services:
       # QDRANT_READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
       QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?QDRANT_API_KEY is required}
       QDRANT__SERVICE__READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY:?QDRANT_READ_ONLY_API_KEY is required}
-      DEBUG: True
+      DEBUG: "True"
     healthcheck:
       test: ["CMD", "bash", "-ec", "echo > /dev/tcp/127.0.0.1/6333"]
       interval: 5s
@@ -296,7 +282,7 @@ services:
       EMBEDDING_MODEL: BAAI/bge-m3
       EMBEDDING_DIM: "1024"
       RAG_SEARCH_TIMEOUT_SECONDS: 60
-      KB_DB_HOST: database-mysql-server
+      KB_DB_HOST: mysql-service
       KB_DATABASE: agent_kb
       # Private bind environment
       QDRANT_API_KEY: ${QDRANT_API_KEY}
@@ -317,7 +303,7 @@ services:
       - 1.1.1.1
       - 8.8.8.8
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/ready"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/ready', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
