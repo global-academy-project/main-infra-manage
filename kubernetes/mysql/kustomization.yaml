@@ -4,5 +4,17 @@ resources:
   - configmap.yaml
   - secret.yaml
   - service.yaml
+  - volume.yaml
   - statefulset.yaml
   - job.yaml
+
+configMapGenerator:
+  - name: mysql-init-scripts
+    files:
+      - db/init/10-agent-kb.sh
+  - name: mysql-verify-files
+    files:
+      - db/verify/container-delivery-insert-db.sql
+      - db/verify/negative_tests.sh
+      - db/verify/smoke_test.sql
+      - db/verify/verify.sh
