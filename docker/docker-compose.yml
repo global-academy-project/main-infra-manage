@@ -116,6 +116,7 @@ services:
       CHECK_RULES_TOOL: ${CHECK_RULES_TOOL:-MOCK}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       QDRANT_READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
+      MSDS_TOOL: ${MSDS_TOOL:-KOSHA}
       KOSHA_MSDS_SERVICE_KEY: ${KOSHA_MSDS_SERVICE_KEY:-}
     volumes:
       - ai-model-cache:/models/huggingface

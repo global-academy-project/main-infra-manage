@@ -36,15 +36,15 @@ services:
       APP_AGENT_BASE_URL: http://python-ai-model:60100
       APP_AGENT_CLIENT: fastapi
       STT_MODEL_NAME: whisper-small-ko
-      LLM_ADAPTERS: ${LLM_ADAPTERS:-}
       VISION_MODEL_PATH: /models/huggingface/yolox/yolox_nano.onnx
       VISION_HELMET_MODEL_PATH: /models/huggingface/yolox/helmet_nano.onnx
       STT_MODEL_PATH: /models/huggingface/whisper-small-ko
       # Private bind environment
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
-      # MySQL이 실행 중인 호스트는 MySQL 서비스 이름(mysql-service)로 설정한다.
-      MYSQL_HOST: ${MYSQL_HOST:-mysql-service}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # MySQL이 실행 중인 호스트는 MySQL 서비스 이름(mysql-service)로 설정한다.
+      LLM_ADAPTERS: ${LLM_ADAPTERS:-}
+      MYSQL_HOST: ${MYSQL_HOST:-mysql-service}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_USER: ${MYSQL_USER:-}
@@ -95,6 +95,7 @@ services:
       CHECK_RULES_TOOL: ${CHECK_RULES_TOOL:-MOCK}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       QDRANT_READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
+      MSDS_TOOL: ${MSDS_TOOL:-KOSHA}
       KOSHA_MSDS_SERVICE_KEY: ${KOSHA_MSDS_SERVICE_KEY:-}
     volumes:
       - ai-model-cache:/models/huggingface
@@ -282,7 +283,7 @@ services:
       EMBEDDING_MODEL: BAAI/bge-m3
       EMBEDDING_DIM: "1024"
       RAG_SEARCH_TIMEOUT_SECONDS: 60
-      KB_DB_HOST: mysql-service
+      KB_DB_HOST: ${MYSQL_HOST}
       KB_DATABASE: agent_kb
       # Private bind environment
       QDRANT_API_KEY: ${QDRANT_API_KEY}
@@ -312,8 +313,8 @@ services:
         condition: service_completed_successfully
       qdrant-server:
         condition: service_healthy
-      database-mysql-server:
-        condition: service_healthy
+      # database-mysql-server:
+      #   condition: service_healthy
   
 #----------------------------------------------------------------------------------
 
