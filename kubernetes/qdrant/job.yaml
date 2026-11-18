@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: qdrant-init-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: qdrant-init
+        image: your-qdrant-init-image:latest
+        envFrom:
+        - configMapRef:
+            name: qdrant-config
+        - secretRef:
+            name: qdrant-secret
+        env:
+        - name: Qdrant-server-url
+          valueFrom:
+            configMapKeyRef:
+              name: qdrant-config
+              key: QDRANT_URL
+        - name: Qdrant-api-key
+          valueFrom:
+            secretKeyRef:
+              name: qdrant-secret
+              key: QDRANT__SERVICE__API_KEY
+          
+      restartPolicy: Never
+  backoffLimit: 4
