@@ -108,9 +108,9 @@ services:
       EMBEDDING_URL: http://python-embedding-model:60110/v1/embeddings
       EMBEDDING_MODEL: BAAI/bge-m3
       EMBEDDING_DIM: "1024"
-      VISION_MODEL_PATH: /models/huggingface/yolox/yolox_nano.onnx
-      VISION_HELMET_MODEL_PATH: /models/huggingface/yolox/helmet_nano.onnx
-      LLM_ADAPTERS: '{"extract":"/models/huggingface/adapters/extract","work_register":"/models/huggingface/adapters/work_register"}'
+      VISION_MODEL_PATH: /models/yolox/yolox_nano.onnx
+      VISION_HELMET_MODEL_PATH: /models/yolox/helmet_nano.onnx
+      LLM_ADAPTERS: '{"extract":"/models/adapters/extract","work_register":"/models/adapters/work_register"}'
       NETWORK_ENV: OPEN
       INTERNAL_API_BASE_URL: http://spring-boot-application:60001
       QDRANT_URL: http://qdrant-server:6333
