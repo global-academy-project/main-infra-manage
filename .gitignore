@@ -68,3 +68,5 @@ secret.yaml
 *.tfstate.*
 crash.log
 crash.*.log
+
+adapters/

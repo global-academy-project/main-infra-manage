@@ -143,6 +143,12 @@ docker compose --env-file docker\.env -f docker\docker-compose.yml run --rm kb-m
 
 일반적인 `down`은 named volume을 보존합니다. **`down -v`는 DB와 모델 캐시 등 Compose가 관리하는 named volume을 삭제하므로, 데이터 초기화가 목적이 아니라면 사용하지 않습니다.**
 
+### Python AI 어댑터와 안전모델 파일
+
+LoRA 어댑터와 안전모델을 이미지 및 named volume에 배치하는 방법과
+기존 볼륨이 새 파일을 덮어쓰지 않을 때의 복구 절차는
+[AI_MODEL_FILES.md](./AI_MODEL_FILES.md)에 정리되어 있습니다.
+
 ## migration.Dockerfile — Kubernetes용 DB 마이그레이션 이미지
 
 ### 역할
