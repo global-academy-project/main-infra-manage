@@ -61,6 +61,7 @@ out/
 
 # Kubernetes
 secret.yaml
+common-secret.yaml
 
 # Terraform
 .terraform/
