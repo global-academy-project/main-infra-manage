@@ -364,6 +364,9 @@ services:
   prometheus:
     image: prom/prometheus:v3.13.5
     container_name: prometheus-container
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus:rw
     ports:
       - "9090:9090"
     networks:
@@ -403,6 +406,8 @@ volumes:
   embedding-model-cache:
     driver: local
   grafana-data:
+    driver: local
+  prometheus-data:
     driver: local
   default:
     driver: local
