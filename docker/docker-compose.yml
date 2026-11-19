@@ -371,7 +371,7 @@ services:
     image: grafana/grafana:13.0-slim
     container_name: grafana-container
     volumes:
-      - prometheus/data:/var/lib/prometheus:rw
+      - /prometheus/data:/var/lib/prometheus:rw
     ports:
       - "3000:3000"
     networks:
