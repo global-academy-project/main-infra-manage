@@ -121,7 +121,7 @@ services:
       VISION_MODEL_PATH: /models/yolox/yolox_nano.onnx
       VISION_HELMET_MODEL_PATH: /models/yolox/helmet_nano.onnx
       STT_MODEL_PATH: /models/yolox/whisper-small-ko
-      WORK_REGISTER_ADAPTERS_PATH: ${WORK_REGISTER_ADAPTERS_PATH:-}
+      # WORK_REGISTER_ADAPTERS_PATH: ${WORK_REGISTER_ADAPTERS_PATH:-}
       #### Key
       INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required}
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
