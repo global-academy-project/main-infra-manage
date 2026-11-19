@@ -366,6 +366,16 @@ services:
       - "9090:9090"
     networks:
       - default
+
+  grafana:
+    image: grafana/grafana:13.0-slim
+    container_name: grafana-container
+    volumes:
+      - prometheus/data:/var/lib/prometheus:rw
+    ports:
+      - "3000:3000"
+    networks:
+      - default
   
 #----------------------------------------------------------------------------------
 
