@@ -1,15 +1,22 @@
+#################################################################################################
+# 정의되지 않는 환경 변수 값들
+# Note: 해당 정의되지 않는 환경 변수들은 별도 Volume이나 Deployment, StatefulSet, Job 등에서 정의되어야 함
+#
+# INTERNAL_API_BASE_URL, VITE_API_PROXY_TARGET = http://spring-service:port
+# EMBEDDING_URL = http://embedding-service:port
+# APP_OCR_BASE_URL, APP_AGENT_BASE_URL = http://ai-model-service:port
+# QDRANT_URL = http://qdrant-service:port
+#
+# HF_HOME = /models/huggingface
+# VISION_MODEL_PATH, VISION_HELMET_MODEL_PATH, STT_MODEL_PATH, STT_MODEL_NAME = /models/...
+#################################################################################################
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: common-mysql-config
+  name: common-spring-config
 
 data:
-  MYSQL_DATABASE: ocrdb
-  MYSQL_PORT: "3306"
-  MYSQL_USER: user
-  MYSQL_ENCODING_TYPE: utf8mb4
-  MYSQL_COLLATION: utf8mb4_unicode_ci
-  TZ: Asia/Seoul
+  JAVA_TOOL_OPTIONS: "-Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8"
 
 ---
 apiVersion: v1
@@ -17,8 +24,31 @@ kind: ConfigMap
 metadata:
   name: common-python-config
 
+annotations:
+  description: |
+    - WORK_REGISTER_ADAPTERS_PATH는 작업 등록 어댑터 경로를 나타내는 공통 설정으로 PVC에서 정의
+    - AI_TIMEOUT_SECONDS, AI_MAX_OUTPUT_TOKENS는 AI 관련 설정의 공통 값
+
 data:
-  EMBEDDING_URL: http://embedding-service:60110/v1/embeddings
+  # WORK_REGISTER_ADAPTERS_PATH: /app/adapters/work_register/
+  AI_TIMEOUT_SECONDS: "30"
+  AI_MAX_OUTPUT_TOKENS: "1000"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: common-embedding-config
+
+annotations:
+  description: |
+    - EMBEDDING_URL은 해당 서비스의 이름과 포트를 별도 Service.yaml에서 정의
+    - EMBEDDING_URL, EMBEDDING_MODEL, EMBEDDING_DIM 등은 임베딩 서비스와 관련된 서비스들의 공통 설정
+
+data:
+  # EMBEDDING_URL은 임베딩 서비스의 엔드포인트 URL을 나타내고 해당 서비스의 포트를 반드시 명시되있을 경우
+  # Port에 해당하는 값을 명시해야 함
+  EMBEDDING_URL: "http://embedding-service:port/v1/embeddings"
   EMBEDDING_MODEL: "BAAI/bge-m3"
   EMBEDDING_DIM: "1024"
   EMBEDDING_MAX_TOKENS: "8192"
@@ -31,9 +61,40 @@ kind: ConfigMap
 metadata:
   name: common-model-config
 
+annotations:
+  description: |
+    - APP_EXTRACT_LLM_CLIENT, APP_PHOTO_VISION_CLIENT, APP_STT_CLIENT는 FastAPI 클라이언트 설정과 관련된 공통 설정 [DEFAULT_MODEL_CLIENT 값 사용]
+    - VISION_MODEL_PATH, VISION_HELMET_MODEL_PATH, STT_MODEL_PATH, STT_MODEL_NAME은 모델 파일과 경로를 나타내기 때문에 PVC에서 정의
+
 data:
-  VISION_MODEL_PATH: model/yolox/yolox_nano.onnx
-  VISION_HELMET_MODEL_PATH: /models/yolox/helmet_nano.onnx
+  DEFAULT_MODEL_CLIENT: fastapi
+  # VISION_MODEL_PATH: model/yolox/yolox_nano.onnx
+  # VISION_HELMET_MODEL_PATH: /models/yolox/helmet_nano.onnx
+  # STT_MODEL_PATH: /models/huggingface/whisper-small-ko
+  # STT_MODEL_NAME: whisper-small-ko
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: common-mysql-config
+
+annotations:
+    description: |
+      - MYSQL_HOST = KB_DB_HOST
+      - MYSQL_PORT = KB_DB_PORT
+
+      Knowledge Base DB는 MySQL을 사용하므로 두 설정은 항상 동일하게 유지해야 한다.
+
+data:
+  MYSQL_DATABASE: ocrdb
+  MYSQL_PORT: "3306"
+  MYSQL_USER: user
+  MYSQL_ENCODING_TYPE: utf8mb4
+  MYSQL_COLLATION: utf8mb4_unicode_ci
+  TZ: Asia/Seoul
+  LANG: C.UTF-8
+  LC_ALL: C.UTF-8
 
 ---
 apiVersion: v1
@@ -42,8 +103,5 @@ metadata:
   name: common-kb-config
 
 data:
+  KB_OWNER_USER: kb_owner
   KB_DATABASE: agent_kb
-  # `KB_DB_PORT`와 `KB_DB_HOST`는 MySQL의 포트와 서비스의 주소를 동일하게 설정해야 하기 때문에
-  # Job 등에서 `MYSQL_PORT`의 값을 참조하도록 설정 예정
-  KB_DB_HOST: mysql-service
-  KB_DB_PORT: "3306"

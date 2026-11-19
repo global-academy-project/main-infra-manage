@@ -1,68 +1,51 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: mysql-statefulset
+  name: mysql-client
 spec:
   selector:
     matchLabels:
       app: mysql
   serviceName: mysql-service
-  # Note: 현재 프로젝트 규모와 데이터 특성을 고려하여 단일 MySQL 인스턴스로 운영한다.
-  # 고가용성(HA) 또는 Replication 구성은 범위에 포함하지 않는다.
   replicas: 1
   template:
     metadata:
       labels:
         app: mysql
     spec:
-      #### Container Set
       containers:
-      - name: mysql-client
-        # 기존 사용되는 이미지 8버전에서 8.4.13으로 변경하고, Oracle Linux 9 기반 이미지를 사용한다.
+      - name: mysql-client-container
         image: mysql:8.4.13-oraclelinux9
-        # Resource의 요청을 1Gi, 제한을 2Gi로 설정한다. 이에 대한 사유는 기본 컨테이너에서
-        # 유휴 상태임에 불구하고 Memory 가용량이 500MB에 근접하기 때문에 상한을 2Gi로 설정한다.
         resources:
           requests:
-            cpu: "1"
-            memory: "1Gi"
+            memory: "256Mi"
+            cpu: "100m"
           limits:
-            cpu: "2"
-            memory: "2Gi"
+            memory: "512Mi"
+            cpu: "500m"
         envFrom:
         - configMapRef:
-            name: mysql-client-config
+            name: mysql-init-scripts
+        - configMapRef:
+            name: common-mysql-config
         - secretRef:
-            name: mysql-client-secret
-        args:
-        - mysqld
-        - --log-bin-trust-function-creators=1
-        - --default-time-zone=+09:00
-        ports:
-        # Container Port를 정의하는 것이 외부 접근(host connect)를 허용하는 것은 아니다.
-        # 외부 접근은 Service의 NodePort 설정으로 별도 구성한다.
-        - containerPort: 3306
-          name: mysql
+            name: common-mysql-secret
+        - secretRef:
+            name: common-kb-secret
         volumeMounts:
-        - name: mysql-client-data
+        - name: mysql-data-pvc
           mountPath: /var/lib/mysql
         - name: mysql-init-scripts
           mountPath: /docker-entrypoint-initdb.d
-          readOnly: true
-        - name: mysql-verify-files
-          mountPath: /opt/verify
-          readOnly: true
-      #### Volume Set
+        args:
+        - mysqld
+        - --character-set-server=utf8mb4
+        - --collation-server=utf8mb4_unicode_ci
+        - --default-time-zone=+09:00
       volumes:
-      - name: mysql-client-data
-        persistentVolumeClaim:
-          claimName: mysql-client-data
-      - name: mysql-init-scripts
-        configMap:
-          name: mysql-init-scripts
-          defaultMode: 0555
-      - name: mysql-verify-files
-        configMap:
-          name: mysql-verify-files
-      #### Network Set
-      dnsPolicy: ClusterFirst
+        - name: mysql-init-scripts
+          configMap:
+            name: mysql-init-scripts
+    volumeClaimTemplates:
+    - metadata:
+        name: mysql-data-pvc

@@ -1,9 +1,17 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - configmap.yaml
-  - secret.yaml
-  - service.yaml
-  - volume.yaml
-  - statefulset.yaml
-  - job.yaml
+  #### Common Configurations
+  - common-config.yaml
+  - common-secret.yaml
+  #### Application Resources
+  # Web Service
+  - vite
+  # Spring Boot Server Service
+  - spring
+  # AI and Model Services
+  - agent
+  - embedding
+  # Database and Search Engine Resources
+  - mysql
+  - qdrant
