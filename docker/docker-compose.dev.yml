@@ -10,11 +10,13 @@ services:
       - default
     build:
       context: ../../main-vite-web
-      dockerfile: Dockerfile
+      dockerfile: orchestration.Dockerfile
     environment:
       VITE_API_PROXY_TARGET: http://spring-boot-application:60001
+    volumes:
+      - ./nginx.compose.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
-      - "50001:50001"
+      - "50001:80"
     dns:
       - 1.1.1.1
       - 8.8.8.8

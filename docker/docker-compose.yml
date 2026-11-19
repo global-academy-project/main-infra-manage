@@ -52,6 +52,9 @@ services:
       dockerfile: Dockerfile
     environment:
       # Public bind environment
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      JAVA_TOOL_OPTIONS: "-Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8"
       # Spring boot server in the running database lock the host is MySQL service name
       MYSQL_HOST: database-mysql-server
       VISION_MODEL_PATH: /models/huggingface/yolox/yolox_nano.onnx
@@ -129,8 +132,8 @@ services:
       KOSHA_MSDS_SERVICE_KEY: ${KOSHA_MSDS_SERVICE_KEY:-}
     volumes:
       - ai-model-cache:/models/huggingface
-    ports:
-      - "60100:60100"
+    # ports:
+    #   - "60100:60100"
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -197,6 +200,8 @@ services:
     environment:
       # Public bind environment
       TZ: Asia/Seoul
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
       # Private bind environment
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
@@ -209,10 +214,12 @@ services:
       [
         "mysqld",
         "--log-bin-trust-function-creators=1",
-        "--default-time-zone=+09:00"
+        "--default-time-zone=+09:00",
+        "--character-set-server=utf8mb4",
+        "--collation-server=utf8mb4_unicode_ci"
       ]
-    ports:
-      - "60010:3306"
+    # ports:
+    #   - "60010:3306"
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -275,8 +282,8 @@ services:
       timeout: 3s
       retries: 12
       start_period: 5s
-    ports:
-      - "60011:6333"
+    # ports:
+    #   - "60011:6333"
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -328,8 +335,8 @@ services:
       - ../../main-ai-model/out/vectors:/data/vectors
     networks:
       - default
-    ports:
-      - "8001:8001"
+    # ports:
+    #   - "8001:8001"
     dns:
       - 1.1.1.1
       - 8.8.8.8
