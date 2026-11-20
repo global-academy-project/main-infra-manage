@@ -88,13 +88,9 @@ annotations:
 
 data:
   MYSQL_DATABASE: ocrdb
-  MYSQL_PORT: "3306"
   MYSQL_USER: user
   MYSQL_ENCODING_TYPE: utf8mb4
   MYSQL_COLLATION: utf8mb4_unicode_ci
-  TZ: Asia/Seoul
-  LANG: C.UTF-8
-  LC_ALL: C.UTF-8
 
 ---
 apiVersion: v1
@@ -105,3 +101,18 @@ metadata:
 data:
   KB_OWNER_USER: kb_owner
   KB_DATABASE: agent_kb
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: common-system-config
+
+annotations:
+    description: |
+      해당 ConfigMap은 MySQL, Spring 등 내부 시스템에서 공통적으로 사용되는 설정을 정의한다.
+
+data:
+  TZ: Asia/Seoul
+  LANG: C.UTF-8
+  LC_ALL: C.UTF-8

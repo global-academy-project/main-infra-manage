@@ -15,7 +15,7 @@ configMapGenerator:
 
   - name: mysql-verify-files
     files:
-      # - db/verify/container-delivery-insert-db.sql
+      - db/verify/container-delivery-insert-db.sql
+      - db/verify/verify.sh
       # - db/verify/negative_tests.sh
       # - db/verify/smoke_test.sql
-      - db/verify/verify.sh

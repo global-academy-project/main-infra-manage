@@ -8,10 +8,10 @@ scrape_configs:
       - targets: ["prometheus:9090"]
 
   # Spring Boot 애플리케이션에 Prometheus 의존성과 /actuator/prometheus 엔드포인트가 적용된 경우 사용
-  - job_name: "spring-boot"
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: ["spring-boot-application:60001"]
+  # - job_name: "spring-boot"
+  #   metrics_path: /actuator/prometheus
+  #   static_configs:
+  #     - targets: ["spring-boot-application:60001"]
 
   # Prometheus 메트릭을 제공하는 FastAPI 애플리케이션 엔드포인트가 있는 경우 사용
   - job_name: "python-ai-model"
@@ -24,5 +24,17 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ["python-embedding-model:60110"]
+
+  # Ingest 서비스에 Prometheus 메트릭을 제공하는 엔드포인트가 있는 경우 사용
+  - job_name: "ingest-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["ingest-service:8001"]
+
+  # Qdrant 서비스에 Prometheus 메트릭을 제공하는 엔드포인트가 있는 경우 사용
+  - job_name: "qdrant-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["qdrant-service:6333"]
 
   # Docker 컨테이너 메트릭 수집을 위해서는 별도 node-exporter 또는 cAdvisor 구성 필요

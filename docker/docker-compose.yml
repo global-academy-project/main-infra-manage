@@ -57,12 +57,12 @@ services:
       JAVA_TOOL_OPTIONS: "-Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8"
       # Spring boot server in the running database lock the host is MySQL service name
       MYSQL_HOST: database-mysql-server
+      MYSQL_PORT: 3306
+      # Spring boot server lock to database port is binding to MySQL default port
       VISION_MODEL_PATH: /models/huggingface/yolox/yolox_nano.onnx
       VISION_HELMET_MODEL_PATH: /models/huggingface/yolox/helmet_nano.onnx
       STT_MODEL_PATH: /models/huggingface/whisper-small-ko
       STT_MODEL_NAME: whisper-small-ko
-      # Spring boot server lock to database port is binding to MySQL default port
-      MYSQL_PORT: 3306
       APP_OCR_BASE_URL: http://python-ai-model:60100
       APP_AGENT_BASE_URL: http://python-ai-model:60100
       APP_AGENT_CLIENT: fastapi
@@ -105,31 +105,32 @@ services:
     environment:
       # Public bind environment
       # RAG search client: calls the embedding server and queries Qdrant
+      NETWORK_ENV: OPEN
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required}
+      CHECK_RULES_TOOL: ${CHECK_RULES_TOOL:-MOCK}
       RAG_BACKEND: app.rag.tool_backend:build_search_backend
       RAG_SEARCH_TIMEOUT_SECONDS: 60
-      EMBEDDING_MODEL: BAAI/bge-m3
-      EMBEDDING_DIM: "1024"
-      STT_MODEL_NAME: whisper-small-ko
-      LLM_ADAPTERS: '{"extract":"/models/adapters/extract","work_register":"/models/adapters/work_register"}'
-      NETWORK_ENV: OPEN
       # Private bind environment
-      CHECK_RULES_TOOL: ${CHECK_RULES_TOOL:-MOCK}
-      MSDS_TOOL: ${MSDS_TOOL:-KOSHA}
       #### URL
-      EMBEDDING_URL: http://python-embedding-model:60110/v1/embeddings
       INTERNAL_API_BASE_URL: http://spring-boot-application:60001
-      QDRANT_URL: http://qdrant-server:6333
-      #### Path
+      #### Model paths
+      STT_MODEL_NAME: whisper-small-ko
       HF_HOME: /models/huggingface
+      LLM_ADAPTERS: '{"extract":"/models/adapters/extract","work_register":"/models/adapters/work_register"}'
       VISION_MODEL_PATH: /models/yolox/yolox_nano.onnx
       VISION_HELMET_MODEL_PATH: /models/yolox/helmet_nano.onnx
       STT_MODEL_PATH: /models/huggingface/whisper-small-ko
-      # WORK_REGISTER_ADAPTERS_PATH: ${WORK_REGISTER_ADAPTERS_PATH:-}
-      #### Key
-      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required}
-      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
-      QDRANT_READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
+      #### KOSHA MSDS service key
       KOSHA_MSDS_SERVICE_KEY: ${KOSHA_MSDS_SERVICE_KEY:-}
+      MSDS_TOOL: ${MSDS_TOOL:-KOSHA}
+      #### Qdrant service configuration
+      QDRANT_URL: http://qdrant-server:6333
+      QDRANT_READ_ONLY_API_KEY: ${QDRANT_READ_ONLY_API_KEY}
+      #### Embedding service configuration
+      EMBEDDING_URL: http://python-embedding-model:60110/v1/embeddings
+      EMBEDDING_MODEL: BAAI/bge-m3
+      EMBEDDING_DIM: "1024"
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
     volumes:
       - ai-model-cache:/models/huggingface
     # ports:
@@ -384,6 +385,8 @@ services:
     container_name: grafana-container
     volumes:
       - grafana-data:/var/lib/grafana:rw
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "3000:3000"
     networks:
